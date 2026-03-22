@@ -5,8 +5,8 @@ import time
 import base64
 import re
 from datetime import datetime
-from PIL import Image
-import io
+#from PIL import Image
+#import io
 
 # ==========================================
 # CONFIGURACIÓN INICIAL
