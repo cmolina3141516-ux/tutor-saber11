@@ -391,4 +391,4 @@ with img_col1:
         st.image(image, caption="Imagen cargada", use_container_width=True)
 
 with img_col2:
-    st.markdown("**O pega imagen desde el portapapeles (
+    st.markdown("**O pega imagen desde el portapapeles (Ctrl+V):**")
