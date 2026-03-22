@@ -223,17 +223,17 @@ def validar_contenido_saber11(texto):
     return False, mensaje_advertencia
 
 # ==========================================
-# CONFIGURACIÓN DE API KIMI
+# CONFIGURACIÓN DE API GROQ (CAMBIO AQUÍ)
 # ==========================================
-def get_kimi_client():
-    api_key = os.getenv("KIMI_API_KEY")
+def get_groq_client():
+    api_key = os.getenv("GROQ_API_KEY")  # Cambiado de KIMI_API_KEY
     if not api_key:
         st.error("🔑 API Key no configurada. Contacta a tu profesor.")
         st.stop()
     
     return openai.OpenAI(
         api_key=api_key,
-        base_url="https://api.moonshot.cn/v1"
+        base_url="https://api.groq.com/openai/v1"  # URL de Groq
     )
 
 # ==========================================
@@ -277,9 +277,9 @@ if not st.session_state.agente_activado:
         <ul style="list-style: none; padding: 0;">
             <li>🎤 <strong>Reconocimiento de voz:</strong> Habla con el tutor</li>
             <li>📸 <strong>Análisis de imágenes:</strong> Sube capturas de pantalla</li>
-            <li⏱️ <strong>Sesiones de 15 min:</strong> Entrenamiento enfocado</li>
-            <li🔒 <strong>Contenido exclusivo:</strong> Solo temas ICFES</li>
-            <li🌐 <strong>Multiidioma:</strong> Español, English, Português</li>
+            <li>⏱️ <strong>Sesiones de 15 min:</strong> Entrenamiento enfocado</li>
+            <li>🔒 <strong>Contenido exclusivo:</strong> Solo temas ICFES</li>
+            <li>🌐 <strong>Multiidioma:</strong> Español, English, Português</li>
         </ul>
     </div>
     """, unsafe_allow_html=True)
@@ -301,18 +301,16 @@ if st.session_state.start_time:
 
 # Barra de progreso de tiempo fija en la parte superior
 if not st.session_state.bloqueado:
-    progress, remaining, _ = (elapsed / st.session_state.time_limit, remaining, False) if st.session_state.start_time else (0, 900, False)
+    progress = elapsed / st.session_state.time_limit if st.session_state.start_time else 0
+    remaining = st.session_state.time_limit - elapsed if st.session_state.start_time else 900
     
     col1, col2, col3 = st.columns([1, 3, 1])
     with col2:
         if progress < 0.5:
-            color = "normal"
             emoji = "🟢"
         elif progress < 0.8:
-            color = "orange"
             emoji = "🟡"
         else:
-            color = "red"
             emoji = "🔴"
             
         st.progress(min(progress, 1.0), text=f"{emoji} Progreso de tu sesión de entrenamiento (15 min)")
@@ -393,216 +391,4 @@ with img_col1:
         st.image(image, caption="Imagen cargada", use_container_width=True)
 
 with img_col2:
-    st.markdown("**O pega imagen desde el portapapeles (Ctrl+V):**")
-    
-    # JavaScript para capturar paste de imagen
-    paste_component = st.components.v1.html("""
-    <div id="paste-area" style="border: 2px dashed #1f4788; padding: 20px; text-align: center; 
-         background: #e3f2fd; border-radius: 10px; min-height: 100px;">
-        Haz clic aquí y presiona Ctrl+V
-    </div>
-    <input type="text" id="image-data" style="display:none;">
-    <script>
-        const pasteArea = document.getElementById('paste-area');
-        pasteArea.addEventListener('paste', function(e) {
-            e.preventDefault();
-            const items = e.clipboardData.items;
-            for (let i = 0; i < items.length; i++) {
-                if (items[i].type.indexOf('image') !== -1) {
-                    const blob = items[i].getAsFile();
-                    const reader = new FileReader();
-                    reader.onload = function(event) {
-                        document.getElementById('image-data').value = event.target.result;
-                        pasteArea.innerHTML = '<img src="' + event.target.result + '" style="max-width:100%;">';
-                    };
-                    reader.readAsDataURL(blob);
-                }
-            }
-        });
-    </script>
-    """, height=150)
-    
-    # Input para recibir la imagen pegada
-    pasted_data = st.text_input("Imagen pegada (base64)", key="pasted_image", label_visibility="collapsed")
-    if pasted_data and pasted_data.startswith('data:image'):
-        try:
-            header, encoded = pasted_data.split(",", 1)
-            image_bytes = base64.b64decode(encoded)
-            image = Image.open(io.BytesIO(image_bytes))
-            st.session_state.current_image = image
-            st.image(image, caption="Imagen pegada desde portapapeles", use_container_width=True)
-        except Exception as e:
-            st.error("Error al procesar imagen pegada")
-
-# ==========================================
-# ÁREA DE CHAT
-# ==========================================
-st.markdown("### 💬 Conversación con el Profesor Marco")
-
-chat_container = st.container()
-
-with chat_container:
-    for i, msg in enumerate(st.session_state.messages):
-        if msg['role'] == 'system':
-            continue
-        elif msg['role'] == 'user':
-            with st.chat_message("user", avatar="👨‍🎓"):
-                if msg.get('image'):
-                    st.image(msg['image'], width=300)
-                st.write(msg['content'])
-        else:
-            with st.chat_message("assistant", avatar="👨‍🏫"):
-                st.write(msg['content'])
-                # Botón TTS (Text to Speech)
-                if st.button("🔊 Escuchar", key=f"tts_{i}"):
-                    texto_limpio = msg['content'].replace('"', '\\"').replace("'", "\\'").replace('\n', ' ')
-                    js_code = f"""
-                    <script>
-                        if ('speechSynthesis' in window) {{
-                            var msg = new SpeechSynthesisUtterance();
-                            msg.text = "{texto_limpio}";
-                            msg.lang = "{st.session_state.language}";
-                            msg.rate = 0.9;
-                            msg.pitch = 1;
-                            window.speechSynthesis.cancel();
-                            window.speechSynthesis.speak(msg);
-                        }}
-                    </script>
-                    """
-                    st.components.v1.html(js_code, height=0)
-
-# ==========================================
-# INPUT DE USUARIO CON VOZ (STT)
-# ==========================================
-if not st.session_state.bloqueado:
-    # Layout: Input texto + Botón voz
-    cols = st.columns([6, 1])
-    
-    with cols[0]:
-        prompt_text = st.chat_input("Escribe tu pregunta sobre Saber 11° o haz clic en el micrófono...")
-    
-    with cols[1]:
-        # Botón de micrófono con JavaScript para Web Speech API
-        st.markdown("""
-        <button onclick="startRecording()" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                color: white; border-radius: 50%; width: 50px; height: 50px; border: none; 
-                font-size: 24px; cursor: pointer; box-shadow: 0 4px 15px rgba(102,126,234,0.4);">
-            🎤
-        </button>
-        <script>
-            function startRecording() {
-                if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-                    var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-                    var recognition = new SpeechRecognition();
-                    recognition.lang = 'es-CO';
-                    recognition.continuous = false;
-                    recognition.interimResults = false;
-                    
-                    recognition.onstart = function() {
-                        document.querySelector('button[onclick="startRecording()"]').style.background = '#ff6b6b';
-                    };
-                    
-                    recognition.onresult = function(event) {
-                        var transcript = event.results[0][0].transcript;
-                        // Intentar encontrar el input de Streamlit y llenarlo
-                        var inputs = document.querySelectorAll('input[type="text"]');
-                        if(inputs.length > 0) {
-                            inputs[inputs.length-1].value = transcript;
-                            inputs[inputs.length-1].dispatchEvent(new Event('change', { bubbles: true }));
-                            // Trigger Enter key
-                            var ev = new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13 });
-                            inputs[inputs.length-1].dispatchEvent(ev);
-                        }
-                    };
-                    
-                    recognition.onerror = function(event) {
-                        alert('Error al grabar. Asegúrate de usar Chrome y permitir el micrófono.');
-                    };
-                    
-                    recognition.onend = function() {
-                        document.querySelector('button[onclick="startRecording()"]').style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
-                    };
-                    
-                    recognition.start();
-                } else {
-                    alert('Tu navegador no soporta reconocimiento de voz. Usa Chrome o Edge actualizado.');
-                }
-            }
-        </script>
-        """, unsafe_allow_html=True)
-    
-    # Procesar input (texto o voz)
-    if prompt_text:
-        # Validación estricta de contenido
-        es_valido, mensaje_adv = validar_contenido_saber11(prompt_text)
-        
-        if not es_valido:
-            st.markdown(f"<div class='warning-box'>{mensaje_adv}</div>", unsafe_allow_html=True)
-            # Sonido de error (beep)
-            st.components.v1.html("""
-            <script>
-                var audio = new Audio('data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=');
-                audio.play().catch(e => {});
-            </script>
-            """, height=0)
-        else:
-            # Agregar mensaje del usuario
-            user_msg = {"role": "user", "content": prompt_text}
-            if st.session_state.current_image:
-                user_msg["image"] = st.session_state.current_image
-                # Convertir imagen para análisis de Kimi (si soporta vision)
-                # Nota: Kimi k2.5 es multimodal, puede analizar imágenes
-            st.session_state.messages.append(user_msg)
-            
-            # Generar respuesta con Kimi
-            with st.chat_message("assistant", avatar="👨‍🏫"):
-                with st.spinner("🧠 Profesor Marco está analizando..."):
-                    try:
-                        client = get_kimi_client()
-                        
-                        # Preparar mensajes para la API
-                        api_messages = []
-                        for m in st.session_state.messages:
-                            if m['role'] == 'system':
-                                api_messages.append({"role": "system", "content": m['content']})
-                            elif m['role'] == 'user':
-                                content = m['content']
-                                # Si hay imagen, agregar descripción o manejar según capacidad de Kimi
-                                if m.get('image'):
-                                    content += "\n[El usuario ha adjuntado una imagen para análisis]"
-                                api_messages.append({"role": "user", "content": content})
-                            else:
-                                api_messages.append({"role": "assistant", "content": m['content']})
-                        
-                        response = client.chat.completions.create(
-                            model="kimi-k2.5",
-                            messages=api_messages,
-                            temperature=0.7,
-                            max_tokens=2048
-                        )
-                        
-                        respuesta = response.choices[0].message.content
-                        st.write(respuesta)
-                        
-                        # Agregar a historial
-                        st.session_state.messages.append({"role": "assistant", "content": respuesta})
-                        
-                        # Auto-play voz si está habilitado (opcional)
-                        # st.components.v1.html(f"""...""", height=0)
-                        
-                    except Exception as e:
-                        st.error(f"Error de conexión con Kimi: {str(e)}")
-                        st.info("Verifica tu conexión a internet o contacta al administrador.")
-            
-            # Limpiar imagen después de enviar
-            st.session_state.current_image = None
-            st.rerun()
-
-# Footer
-st.divider()
-st.markdown("""
-<div style="text-align: center; color: #666; font-size: 0.8rem;">
-    <p>🔒 Tutor especializado Prueba Saber 11° | <strong>Profesor Marco</strong> | Potenciado por Kimi K2.5</p>
-    <p>💡 Recuerda: La práctica constante es la clave del éxito en el ICFES</p>
-</div>
-""", unsafe_allow_html=True)
+    st.markdown("**O pega imagen desde el portapapeles (
