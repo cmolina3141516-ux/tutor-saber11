@@ -68,6 +68,7 @@ st.markdown(
       .setup-intro p { position:relative; z-index:1; color:#e5f0f7 !important; margin:0; font-size:1.05rem; }
       .route-chips { position:relative; z-index:1; display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1rem; }
       .route-chip { display:inline-flex; align-items:center; padding:.42rem .72rem; border:1px solid rgba(255,255,255,.3); border-radius:999px; color:#f7fbff; background:rgba(255,255,255,.12); font-size:.82rem; font-weight:700; }
+      .attach-hint { color:#536b7d; margin:.45rem 0 .25rem; font-size:.94rem; }
       [data-testid="stForm"] { padding:1.35rem 1.45rem 1.15rem; border:1px solid #c8dce9; border-radius:24px; background:rgba(255,255,255,.78); box-shadow:0 12px 28px rgba(16,37,63,.08); }
       [data-testid="stForm"] button { background:linear-gradient(135deg,#176fa8,#0f84c5) !important; color:white !important; border:0 !important; box-shadow:0 10px 20px rgba(23,111,168,.22); transition:transform .2s ease, box-shadow .2s ease; }
       [data-testid="stForm"] button:hover { transform:translateY(-2px); box-shadow:0 14px 24px rgba(23,111,168,.3); }
@@ -254,11 +255,13 @@ def guided():
 def analysis():
     st.subheader("Analizar una pregunta")
     st.write("Pega el enunciado y sus opciones, o adjunta una imagen/PDF. El tutor te ayudará a razonar sin revelar la respuesta de inmediato.")
+    st.markdown("<div class='attach-hint'>Arrastra aquí una captura de pantalla de cualquier pregunta o selecciónala desde tu dispositivo.</div>", unsafe_allow_html=True)
     attachment = st.file_uploader(
-        "📎 Adjuntar imagen o PDF",
-        type=["png", "jpg", "jpeg", "webp", "pdf"],
+        "📎 Arrastra y suelta una captura o haz clic para adjuntarla",
+        type=["png", "jpg", "jpeg", "webp", "gif", "bmp", "pdf"],
         key="analysis_attachment",
-        help="Puedes adjuntar una captura de la pregunta, sus opciones o un PDF corto.",
+        accept_multiple_files=False,
+        help="Formatos aceptados: PNG, JPG, JPEG, WEBP, GIF, BMP y PDF.",
     )
     if attachment:
         if attachment.type.startswith("image/"):
