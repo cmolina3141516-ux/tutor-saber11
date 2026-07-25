@@ -58,8 +58,13 @@ st.markdown(
     """
     <style>
       :root { --navy:#10253f; --blue:#176fa8; --gold:#e7ad3d; }
-      .stApp { background:linear-gradient(135deg,#edf4f8,#fdfbf5); }
-      .block-container { max-width:1180px; padding-top:2rem; }
+      .stApp { position:relative; overflow:hidden; background:linear-gradient(135deg,#edf4f8,#fdfbf5); }
+      .block-container { position:relative; z-index:1; max-width:1180px; padding-top:2rem; }
+      .brand-brushes { position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
+      .brand-brushes span { position:absolute; display:block; height:72px; border-radius:999px; opacity:.11; filter:blur(.2px); background:linear-gradient(90deg,#176fa8,#2b9dcc); }
+      .brand-brushes .brush-one { width:420px; top:12%; left:-120px; transform:rotate(-15deg); }
+      .brand-brushes .brush-two { width:520px; top:48%; right:-180px; transform:rotate(18deg); background:linear-gradient(90deg,#0f5d91,#58b4d5); }
+      .brand-brushes .brush-three { width:340px; bottom:8%; left:18%; transform:rotate(9deg); background:linear-gradient(90deg,#2b9dcc,#176fa8); }
       .hero { background:linear-gradient(135deg,#10253f,#1b6590); color:white; border-radius:24px; padding:2rem 2.4rem; margin-bottom:1rem; }
       .hero-grid { display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:2rem; align-items:center; }
       .hero h1 { color:white; margin:0; font-size:clamp(2rem,5vw,3.7rem); }
@@ -84,15 +89,21 @@ st.markdown(
       .stTextInput input, .stSelectbox [data-baseweb="select"] > div { background:#dcecf8 !important; color:#10253f !important; border-color:#a9cfe8 !important; }
       .stTextInput input::placeholder { color:#536b7d !important; opacity:1 !important; }
       .stSelectbox [data-baseweb="select"] div, .stSelectbox [data-baseweb="select"] svg { color:#10253f !important; fill:#10253f !important; }
-      [data-testid="stFileUploaderDropzone"] { background:#dcecf8 !important; border:1px solid #a9cfe8 !important; border-radius:999px !important; transition:background .2s ease, border-color .2s ease, transform .2s ease; }
-      [data-testid="stFileUploaderDropzone"]:hover { background:#c9e3f3 !important; border-color:#176fa8 !important; transform:translateY(-1px); }
-      [data-testid="stFileUploaderDropzone"] button { background:#176fa8 !important; color:white !important; border:0 !important; border-radius:999px !important; font-weight:700 !important; }
-      [data-testid="stFileUploaderDropzone"] small, [data-testid="stFileUploaderDropzone"] span { color:#10253f !important; }
+      .stTextArea label, .stTextArea label p, [data-testid="stFileUploader"] label, [data-testid="stFileUploader"] label p { color:#10253f !important; font-weight:700 !important; }
+      .stTextArea textarea { background:#dcecf8 !important; color:#10253f !important; border:1px solid #a9cfe8 !important; border-radius:16px !important; }
+      .stTextArea textarea::placeholder { color:#536b7d !important; opacity:1 !important; }
+      .stTextArea textarea:focus { border-color:#176fa8 !important; box-shadow:0 0 0 2px rgba(23,111,168,.16) !important; }
+      [data-testid="stFileUploaderDropzone"], [data-testid="stFileUploader"] section[data-testid="stFileUploaderDropzone"] { background:#dcecf8 !important; border:1px solid #a9cfe8 !important; border-radius:999px !important; transition:background .2s ease, border-color .2s ease, transform .2s ease; }
+      [data-testid="stFileUploaderDropzone"]:hover, [data-testid="stFileUploader"] section[data-testid="stFileUploaderDropzone"]:hover { background:#c9e3f3 !important; border-color:#176fa8 !important; transform:translateY(-1px); }
+      [data-testid="stFileUploaderDropzone"] > div, [data-testid="stFileUploader"] section[data-testid="stFileUploaderDropzone"] > div { background:transparent !important; }
+      [data-testid="stFileUploaderDropzone"] button, [data-testid="stFileUploader"] button { background:#176fa8 !important; color:white !important; border:0 !important; border-radius:999px !important; font-weight:700 !important; }
+      [data-testid="stFileUploaderDropzone"] small, [data-testid="stFileUploaderDropzone"] span, [data-testid="stFileUploader"] small, [data-testid="stFileUploader"] span { color:#10253f !important; }
       @media (max-width: 700px) { .hero-grid { grid-template-columns:1fr; } .hero-avatar { max-width:220px; } }
     </style>
     """,
     unsafe_allow_html=True,
 )
+st.markdown("<div class='brand-brushes' aria-hidden='true'><span class='brush-one'></span><span class='brush-two'></span><span class='brush-three'></span></div>", unsafe_allow_html=True)
 
 
 def client():
