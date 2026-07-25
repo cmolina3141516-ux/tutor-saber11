@@ -306,9 +306,10 @@ def analysis():
         attachment_name = attachment["name"] if isinstance(attachment, dict) else attachment.name
         if attachment_type.startswith("image/"):
             image_data = attachment["bytes"] if isinstance(attachment, dict) else attachment
-            st.image(image_data, caption=f"Adjunto: {attachment_name}", use_container_width=True)
+            st.image(image_data, caption=f"Adjunto: {attachment_name}", use_column_width=True)
         else:
             st.info(f"PDF adjunto: {attachment_name}. Incluye también el enunciado o las opciones en el campo de texto para orientar el análisis.")
+        st.info("Ahora selecciona el área, escribe el enunciado y las opciones si las tienes, y pulsa «Iniciar análisis».")
     with st.form("analysis"):
         area = st.selectbox("Área", list(AREAS))
         question = st.text_area("Enunciado", height=150)
