@@ -58,13 +58,10 @@ st.markdown(
     """
     <style>
       :root { --navy:#10253f; --blue:#176fa8; --gold:#e7ad3d; }
-      .stApp { position:relative; overflow:hidden; background:linear-gradient(135deg,#edf4f8,#fdfbf5); }
+      .stApp { min-height:100vh; background:#edf4f8; }
+      [data-testid="stAppViewContainer"] { min-height:100vh; background:linear-gradient(135deg,rgba(237,244,248,.96),rgba(253,251,245,.97)), linear-gradient(165deg,transparent 0 12%,rgba(23,111,168,.12) 12% 17%,transparent 17% 100%), linear-gradient(20deg,transparent 0 44%,rgba(15,93,145,.1) 44% 49%,transparent 49% 100%), linear-gradient(155deg,transparent 0 74%,rgba(43,157,204,.1) 74% 79%,transparent 79% 100%); }
+      [data-testid="stHeader"] { background:transparent; }
       .block-container { position:relative; z-index:1; max-width:1180px; padding-top:2rem; }
-      .brand-brushes { position:fixed; inset:0; z-index:0; overflow:hidden; pointer-events:none; }
-      .brand-brushes span { position:absolute; display:block; height:72px; border-radius:999px; opacity:.11; filter:blur(.2px); background:linear-gradient(90deg,#176fa8,#2b9dcc); }
-      .brand-brushes .brush-one { width:420px; top:12%; left:-120px; transform:rotate(-15deg); }
-      .brand-brushes .brush-two { width:520px; top:48%; right:-180px; transform:rotate(18deg); background:linear-gradient(90deg,#0f5d91,#58b4d5); }
-      .brand-brushes .brush-three { width:340px; bottom:8%; left:18%; transform:rotate(9deg); background:linear-gradient(90deg,#2b9dcc,#176fa8); }
       .hero { background:linear-gradient(135deg,#10253f,#1b6590); color:white; border-radius:24px; padding:2rem 2.4rem; margin-bottom:1rem; }
       .hero-grid { display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:2rem; align-items:center; }
       .hero h1 { color:white; margin:0; font-size:clamp(2rem,5vw,3.7rem); }
@@ -103,7 +100,6 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-st.markdown("<div class='brand-brushes' aria-hidden='true'><span class='brush-one'></span><span class='brush-two'></span><span class='brush-three'></span></div>", unsafe_allow_html=True)
 
 
 def client():
