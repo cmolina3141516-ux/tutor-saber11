@@ -1,10 +1,13 @@
+import base64
 import json
 import os
 import time
 from datetime import datetime
+from pathlib import Path
 
 import openai
 import streamlit as st
+import streamlit.components.v1 as components
 
 
 st.set_page_config(page_title="Ruta Saber 11 | Profesor Marco", page_icon="🎓", layout="wide")
@@ -25,6 +28,10 @@ RESOURCES = [
 ]
 
 TUTOR_AVATAR_URL = "https://i.postimg.cc/KjzQ9YPT/TUTOR-PRUEBA-SABER-11.png"
+PASTE_CAPTURE = components.declare_component(
+    "paste_capture",
+    path=str(Path(__file__).parent / "components" / "paste_capture"),
+)
 
 
 def init_state():
@@ -144,6 +151,23 @@ def parse_json(text):
     return None
 
 
+def decode_pasted_image(value):
+    if not isinstance(value, dict) or value.get("type") != "image":
+        return None
+    data_url = str(value.get("data", ""))
+    if "," not in data_url:
+        return None
+    try:
+        encoded = data_url.split(",", 1)[1]
+        return {
+            "name": str(value.get("name", "captura.png")),
+            "type": str(value.get("mimeType", "image/png")),
+            "bytes": base64.b64decode(encoded),
+        }
+    except (ValueError, TypeError):
+        return None
+
+
 def fallback(area, index):
     data = {
         "Lectura Crítica": ("Un autor afirma que una medida mejora la educación, pero solo presenta su opinión. ¿Qué debe hacer primero un lector crítico?", ["Aceptar la afirmación", "Buscar la evidencia", "Rechazarla sin leer", "Elegir la opción más larga"], 1, "Evaluación de argumentos", "La lectura crítica exige evaluar la evidencia que sostiene la tesis."),
@@ -256,25 +280,32 @@ def analysis():
     st.subheader("Analizar una pregunta")
     st.write("Pega el enunciado y sus opciones, o adjunta una imagen/PDF. El tutor te ayudará a razonar sin revelar la respuesta de inmediato.")
     st.markdown("<div class='attach-hint'>Arrastra aquí una captura de pantalla de cualquier pregunta o selecciónala desde tu dispositivo.</div>", unsafe_allow_html=True)
-    attachment = st.file_uploader(
+    pasted_value = PASTE_CAPTURE(key="analysis_paste_capture")
+    pasted_attachment = decode_pasted_image(pasted_value)
+    uploaded_attachment = st.file_uploader(
         "📎 Arrastra y suelta una captura o haz clic para adjuntarla",
         type=["png", "jpg", "jpeg", "webp", "gif", "bmp", "pdf"],
         key="analysis_attachment",
         accept_multiple_files=False,
         help="Formatos aceptados: PNG, JPG, JPEG, WEBP, GIF, BMP y PDF.",
     )
+    attachment = pasted_attachment or uploaded_attachment
     if attachment:
-        if attachment.type.startswith("image/"):
-            st.image(attachment, caption=f"Adjunto: {attachment.name}", use_container_width=True)
+        attachment_type = attachment["type"] if isinstance(attachment, dict) else attachment.type
+        attachment_name = attachment["name"] if isinstance(attachment, dict) else attachment.name
+        if attachment_type.startswith("image/"):
+            image_data = attachment["bytes"] if isinstance(attachment, dict) else attachment
+            st.image(image_data, caption=f"Adjunto: {attachment_name}", use_container_width=True)
         else:
-            st.info(f"PDF adjunto: {attachment.name}. Incluye también el enunciado o las opciones en el campo de texto para orientar el análisis.")
+            st.info(f"PDF adjunto: {attachment_name}. Incluye también el enunciado o las opciones en el campo de texto para orientar el análisis.")
     with st.form("analysis"):
         area = st.selectbox("Área", list(AREAS))
         question = st.text_area("Enunciado", height=150)
         options = st.text_area("Opciones A, B, C y D", height=120, placeholder="A. ...\nB. ...\nC. ...\nD. ...")
         submitted = st.form_submit_button("Iniciar análisis", use_container_width=True)
     if submitted and (question.strip() or attachment):
-        attachment_note = f"\nArchivo adjunto: {attachment.name}. No describas su contenido si no puedes verificarlo." if attachment else ""
+        attachment_name = attachment["name"] if isinstance(attachment, dict) else attachment.name
+        attachment_note = f"\nArchivo adjunto: {attachment_name}. No describas su contenido si no puedes verificarlo." if attachment else ""
         prompt = f"Área: {area}\nEnunciado: {question}\nOpciones:\n{options}{attachment_note}"
         messages = [{"role": "system", "content": system_prompt()}, {"role": "user", "content": "Aplica el método 2+2+1 a esta pregunta. No reveles todavía la respuesta.\n" + prompt}]
         with st.spinner("Identificando competencia y distractores..."):

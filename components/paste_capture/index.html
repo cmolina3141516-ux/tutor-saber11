@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <style>
+    :root { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: transparent; color: #10253f; }
+    .dropzone { min-height: 112px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; padding: 16px; border: 1px dashed #8ebedb; border-radius: 999px; background: #dcecf8; text-align: center; outline: none; transition: .2s ease; }
+    .dropzone:hover, .dropzone:focus, .dropzone.over { background: #c9e3f3; border-color: #176fa8; transform: translateY(-1px); }
+    .title { font-size: 16px; font-weight: 800; }
+    .hint { font-size: 13px; color: #536b7d; }
+    button { border: 0; border-radius: 999px; padding: 9px 18px; background: #176fa8; color: white; font-weight: 700; cursor: pointer; transition: .2s ease; }
+    button:hover { background: #0f84c5; transform: translateY(-1px); }
+    #status { min-height: 17px; margin-top: 4px; color: #536b7d; font-size: 12px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div id="dropzone" class="dropzone" tabindex="0">
+    <div class="title">Pega aquí tu captura</div>
+    <div class="hint">Ctrl + V, arrastra una imagen o elige un archivo</div>
+    <button id="choose" type="button">Elegir imagen</button>
+    <input id="file" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" hidden>
+  </div>
+  <div id="status"></div>
+  <script>
+    const dropzone = document.getElementById("dropzone");
+    const fileInput = document.getElementById("file");
+    const status = document.getElementById("status");
+
+    function ready() {
+      window.parent.postMessage({isStreamlitMessage: true, type: "streamlit:componentReady", apiVersion: 1}, "*");
+      window.parent.postMessage({isStreamlitMessage: true, type: "streamlit:setFrameHeight", height: 150}, "*");
+    }
+
+    function send(value) {
+      window.parent.postMessage({isStreamlitMessage: true, type: "streamlit:setComponentValue", value}, "*");
+    }
+
+    function handleFile(file) {
+      if (!file || !file.type.startsWith("image/")) {
+        status.textContent = "Selecciona una imagen o una captura de pantalla.";
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        status.textContent = "Captura lista para analizar: " + (file.name || "captura.png");
+        send({type: "image", name: file.name || "captura.png", mimeType: file.type || "image/png", data: reader.result});
+      };
+      reader.readAsDataURL(file);
+    }
+
+    document.addEventListener("paste", (event) => {
+      const items = Array.from(event.clipboardData?.items || []);
+      const imageItem = items.find((item) => item.type.startsWith("image/"));
+      if (imageItem) {
+        event.preventDefault();
+        handleFile(imageItem.getAsFile());
+      }
+    });
+
+    ["dragenter", "dragover"].forEach((name) => dropzone.addEventListener(name, (event) => {
+      event.preventDefault();
+      dropzone.classList.add("over");
+    }));
+    ["dragleave", "drop"].forEach((name) => dropzone.addEventListener(name, (event) => {
+      event.preventDefault();
+      dropzone.classList.remove("over");
+    }));
+    dropzone.addEventListener("drop", (event) => handleFile(event.dataTransfer.files[0]));
+    document.getElementById("choose").addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", () => handleFile(fileInput.files[0]));
+    window.addEventListener("message", (event) => {
+      if (event.data?.type === "streamlit:render") ready();
+    });
+    ready();
+  </script>
+</body>
+</html>
