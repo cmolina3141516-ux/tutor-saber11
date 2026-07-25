@@ -62,6 +62,10 @@ st.markdown(
       .card { background:rgba(255,255,255,.82); border:1px solid #d6e1e9; border-radius:18px; padding:1.2rem 1.4rem; margin:.6rem 0; }
       .method { border-left:5px solid var(--gold); }
       .stButton > button { border-radius:999px; font-weight:700; }
+      .stTextInput label, .stSelectbox label { color:#10253f !important; font-weight:700 !important; }
+      .stTextInput input, .stSelectbox [data-baseweb="select"] > div { background:#dcecf8 !important; color:#10253f !important; border-color:#a9cfe8 !important; }
+      .stTextInput input::placeholder { color:#536b7d !important; opacity:1 !important; }
+      .stSelectbox [data-baseweb="select"] div, .stSelectbox [data-baseweb="select"] svg { color:#10253f !important; fill:#10253f !important; }
       @media (max-width: 700px) { .hero-grid { grid-template-columns:1fr; } .hero-avatar { max-width:220px; } }
     </style>
     """,
