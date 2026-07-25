@@ -1,162 +1,311 @@
-import streamlit as st
-import openai
+import json
 import os
 import time
+from datetime import datetime
 
-st.set_page_config(page_title="Tutor Saber 11° - Profesor Marco", page_icon="🎓", layout="wide")
+import openai
+import streamlit as st
 
-# CSS
-st.markdown("""
-<style>
-    .main-header { font-size: 2.5rem; font-weight: bold; color: #1f4788; text-align: center; }
-    .professor-img { border-radius: 50%; max-width: 280px; margin: 20px auto; display: block; box-shadow: 0 8px 32px rgba(31,71,136,0.3); }
-    .warning-box { background: linear-gradient(135deg, #ff6b6b, #ee5a6f); color: white; padding: 20px; border-radius: 15px; text-align: center; font-weight: bold; animation: pulse 2s infinite; }
-    @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.02); } }
-</style>
-""", unsafe_allow_html=True)
 
-# Estados
-if 'agente_activado' not in st.session_state:
-    st.session_state.agente_activado = False
-    st.session_state.start_time = None
-    st.session_state.time_limit = 15 * 60
-    st.session_state.messages = []
-    st.session_state.language = 'es-CO'
+st.set_page_config(page_title="Ruta Saber 11 | Profesor Marco", page_icon="🎓", layout="wide")
 
-# Validación
-KEYWORDS = ['matemática', 'álgebra', 'geometría', 'trigonometría', 'estadística', 'lectura', 'comprensión', 'texto', 'biología', 'física', 'química', 'historia', 'geografía', 'inglés', 'english', 'icfes', 'saber', 'prueba', 'examen']
+AREAS = {
+    "Lectura Crítica": "interpretación, inferencia y evaluación de argumentos",
+    "Matemáticas": "interpretación, formulación, ejecución y argumentación",
+    "Sociales y Ciudadanas": "pensamiento social, análisis de perspectivas y deliberación",
+    "Ciencias Naturales": "conocimiento científico, explicación de fenómenos e indagación",
+    "Inglés": "comprensión de lectura, vocabulario e intención comunicativa",
+}
 
-def validar(texto):
-    if not texto: return True, ""
-    texto_lower = texto.lower()
-    for palabra in KEYWORDS:
-        if palabra in texto_lower:
-            return True, ""
-    return False, "⚠️ Solo puedo ayudarte con temas de la Prueba Saber 11 (Matemáticas, Lectura, Ciencias, Sociales, Inglés)"
+RESOURCES = [
+    ("Guía oficial Saber 11", "https://www.icfes.gov.co/evaluaciones-icfes/saber-11/guia-de-orientacion-examen-saber-11/"),
+    ("Qué se evalúa", "https://www.icfes.gov.co/caja-de-herramientas-saber-11/que-se-evalua/"),
+    ("Práctica oficial", "https://www.icfes.gov.co/caja-de-herramientas-saber-11/practica/"),
+    ("Marcos de referencia", "https://www.icfes.gov.co/marcos-de-referencia-examen-saber-11/"),
+]
 
-# API
-def get_client():
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        st.error("API Key no configurada")
-        st.stop()
-    return openai.OpenAI(api_key=api_key, base_url="https://api.groq.com/openai/v1")
 
-# PANTALLA DE INICIO
-if not st.session_state.agente_activado:
-    st.markdown('<div class="main-header">🎓 Tutor Saber 11° Pro</div>', unsafe_allow_html=True)
-    st.markdown('<div style="text-align:center; color:#666; margin-bottom:20px;">Tu asistente personal para la prueba ICFES</div>', unsafe_allow_html=True)
-    
-    imagen = "https://i.postimg.cc/vmkMbL49/PROFESOR-MARCO-AGENTE-PARA-PRUEBA-SABER.png"
-    st.markdown(f'<img src="{imagen}" class="professor-img">', unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([1,2,1])
-    with col2:
-        if st.button("🚀 ACTIVAR AGENTE TUTOR", use_container_width=True):
-            st.session_state.agente_activado = True
-            st.session_state.start_time = time.time()
+def init_state():
+    values = {
+        "configured": False,
+        "student_name": "",
+        "grade": "11°",
+        "target_date": "",
+        "focus_area": "Todas las áreas",
+        "mode": "Práctica guiada",
+        "started_at": None,
+        "chat": [],
+        "analysis": None,
+        "simulations": {},
+    }
+    for key, value in values.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+
+init_state()
+
+st.markdown(
+    """
+    <style>
+      :root { --navy:#10253f; --blue:#176fa8; --gold:#e7ad3d; }
+      .stApp { background:linear-gradient(135deg,#edf4f8,#fdfbf5); }
+      .block-container { max-width:1180px; padding-top:2rem; }
+      .hero { background:linear-gradient(135deg,#10253f,#1b6590); color:white; border-radius:24px; padding:2rem 2.4rem; margin-bottom:1rem; }
+      .hero h1 { color:white; margin:0; font-size:clamp(2rem,5vw,3.7rem); }
+      .hero p { color:#e5edf4; font-size:1.08rem; max-width:800px; }
+      .eyebrow { color:#f0c363; font-weight:700; letter-spacing:.18em; text-transform:uppercase; }
+      .card { background:rgba(255,255,255,.82); border:1px solid #d6e1e9; border-radius:18px; padding:1.2rem 1.4rem; margin:.6rem 0; }
+      .method { border-left:5px solid var(--gold); }
+      .stButton > button { border-radius:999px; font-weight:700; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+def client():
+    key = os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY")
+    if not key:
+        return None
+    args = {"api_key": key}
+    if os.getenv("GROQ_API_KEY"):
+        args["base_url"] = "https://api.groq.com/openai/v1"
+    return openai.OpenAI(**args)
+
+
+def ask_model(messages, max_tokens=850, temperature=0.25):
+    api = client()
+    if api is None:
+        return None
+    response = api.chat.completions.create(
+        model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+    )
+    return response.choices[0].message.content.strip()
+
+
+def profile():
+    return f"Estudiante: {st.session_state.student_name or 'sin nombre'} | Grado: {st.session_state.grade} | Área: {st.session_state.focus_area} | Fecha objetivo: {st.session_state.target_date or 'no definida'}"
+
+
+def system_prompt():
+    areas = "; ".join(f"{name}: {desc}" for name, desc in AREAS.items())
+    return f"""
+Eres Profesor Marco, tutor experto en la Prueba Saber 11 de Colombia. Trabajas las cinco pruebas oficiales: Lectura Crítica, Matemáticas, Sociales y Ciudadanas, Ciencias Naturales e Inglés. Competencias: {areas}.
+Perfil: {profile()}
+
+Tu objetivo es enseñar a comprender y decidir, no entregar respuestas como solucionario.
+APLICA EL MÉTODO 2+2+1: primero pide identificar situación, pregunta y datos; luego ayuda a descartar dos opciones absurdas con una razón breve para cada una; después formula una sola pregunta para comparar las dos restantes; finalmente pide una elección justificada y solo entonces confirma y explica.
+Haz una sola pregunta estratégica por turno para ahorrar tiempo y tokens. Si el estudiante pide explícitamente la solución, explica el razonamiento completo.
+Adapta lenguaje y dificultad al grado. Detecta área, competencia, tipo de error y nivel de seguridad cuando sea posible. No inventes preguntas oficiales, fuentes ni respuestas. No des ayuda durante un simulacro activo. Si una consulta es amplia, pregunta qué aspecto desea profundizar. Responde en español, excepto en la práctica de Inglés.
+""".strip()
+
+
+def parse_json(text):
+    if not text:
+        return None
+    text = text.strip().replace("```json", "").replace("```", "").strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        left, right = text.find("["), text.rfind("]")
+        if left >= 0 and right > left:
+            try:
+                return json.loads(text[left : right + 1])
+            except json.JSONDecodeError:
+                return None
+    return None
+
+
+def fallback(area, index):
+    data = {
+        "Lectura Crítica": ("Un autor afirma que una medida mejora la educación, pero solo presenta su opinión. ¿Qué debe hacer primero un lector crítico?", ["Aceptar la afirmación", "Buscar la evidencia", "Rechazarla sin leer", "Elegir la opción más larga"], 1, "Evaluación de argumentos", "La lectura crítica exige evaluar la evidencia que sostiene la tesis."),
+        "Matemáticas": ("Una cantidad aumenta de 80 a 100. ¿Cuál es el aumento porcentual?", ["20%", "25%", "80%", "125%"], 1, "Razonamiento cuantitativo", "El aumento es 20 y 20/80 = 25%."),
+        "Sociales y Ciudadanas": ("Una comunidad permite que los grupos afectados presenten argumentos antes de aprobar una norma. ¿Qué principio fortalece?", ["Participación ciudadana", "Censura", "Aislamiento", "Decisión secreta"], 0, "Pensamiento social", "Escuchar a los grupos afectados fortalece la deliberación."),
+        "Ciencias Naturales": ("Para comprobar si la luz modifica el crecimiento de una planta, ¿qué variable debe cambiarse deliberadamente?", ["Cantidad de luz", "Conclusión", "Resultado esperado", "Nombre de la planta"], 0, "Indagación", "La variable independiente es la condición que se modifica."),
+        "Inglés": ("Read: 'The library closes at six, so Ana leaves school early to return her books.' Why does Ana leave early?", ["To meet a friend", "To return her books", "To study at home", "To open the library"], 1, "Reading comprehension", "The sentence directly states the reason."),
+    }
+    question, options, correct, competence, explanation = data[area]
+    return {"id": f"fallback-{index}", "area": area, "question": question, "options": options, "correct_index": correct, "competence": competence, "explanation": explanation}
+
+
+def generate_questions(area, count=5):
+    selected = list(AREAS) if area == "Todas las áreas" else [area]
+    prompt = f"""
+Genera {count} preguntas originales estilo Saber 11 para grado {st.session_state.grade}. Áreas permitidas: {', '.join(selected)}. No copies preguntas oficiales. Cada pregunta debe tener una sola respuesta correcta y cuatro opciones. Para Inglés, redacta en inglés. Devuelve únicamente JSON: una lista de objetos con area, question, options (4 textos), correct_index (0-3), competence y explanation.
+"""
+    raw = parse_json(ask_model([{"role": "system", "content": prompt}], max_tokens=2200, temperature=0.35))
+    if not isinstance(raw, list):
+        raw = []
+    result = []
+    for index, item in enumerate(raw[:count]):
+        if not isinstance(item, dict) or not isinstance(item.get("options"), list) or len(item["options"]) != 4:
+            continue
+        correct = item.get("correct_index")
+        if not isinstance(correct, int) or correct not in range(4):
+            continue
+        result.append({
+            "id": f"question-{int(time.time())}-{index}",
+            "area": str(item.get("area", selected[index % len(selected)])),
+            "question": str(item.get("question", "")),
+            "options": [str(option) for option in item["options"]],
+            "correct_index": correct,
+            "competence": str(item.get("competence", "Competencia Saber 11")),
+            "explanation": str(item.get("explanation", "Revisa la relación entre los datos y la opción elegida.")),
+        })
+    if len(result) < count:
+        result.extend(fallback(selected[index % len(selected)], index) for index in range(len(result), count))
+    return result
+
+
+def header():
+    st.markdown(f"<section class='hero'><div class='eyebrow'>Ruta Saber 11</div><h1>Profesor Marco</h1><p>Un guía para comprender las preguntas, tomar decisiones y mejorar tus estrategias en las cinco pruebas.</p><p style='color:#dcecf5'>{profile()}</p></section>", unsafe_allow_html=True)
+
+
+def setup():
+    st.markdown("### Configura tu ruta")
+    st.write("Estos datos permiten adaptar la dificultad y el acompañamiento.")
+    with st.form("setup"):
+        name = st.text_input("Nombre", value=st.session_state.student_name, placeholder="Ej. Laura")
+        grades = ["9°", "10°", "11°", "Egresado"]
+        grade = st.selectbox("Grado", grades, index=grades.index(st.session_state.grade))
+        areas = ["Todas las áreas"] + list(AREAS)
+        area = st.selectbox("Área inicial", areas, index=areas.index(st.session_state.focus_area))
+        date = st.text_input("Fecha aproximada del examen (opcional)", value=st.session_state.target_date, placeholder="Ej. agosto de 2026")
+        submitted = st.form_submit_button("Comenzar ruta", use_container_width=True)
+    if submitted:
+        st.session_state.student_name = name.strip()
+        st.session_state.grade = grade
+        st.session_state.focus_area = area
+        st.session_state.target_date = date.strip()
+        st.session_state.configured = True
+        st.session_state.started_at = time.time()
+        st.session_state.chat = [{"role": "assistant", "content": f"Hola {name.strip() or 'estudiante'}. Trabajaremos con el método 2+2+1: comprender, descartar y justificar. ¿Qué área quieres practicar primero?"}]
+        st.rerun()
+
+
+def sidebar():
+    with st.sidebar:
+        st.markdown("## Tu ruta")
+        st.caption(f"{st.session_state.student_name or 'Sin nombre'} · {st.session_state.grade}")
+        modes = ["Práctica guiada", "Analizar una pregunta", "Simulacros", "Recursos oficiales"]
+        selected = st.radio("Modo", modes, index=modes.index(st.session_state.mode))
+        if selected != st.session_state.mode:
+            st.session_state.mode = selected
             st.rerun()
-    
-    st.markdown("""
-    <div style="background:white; padding:20px; border-radius:15px; max-width:500px; margin:20px auto; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
-        <h4 style="color:#1f4788; text-align:center;">✨ Características</h4>
-        <ul>
-            <li>🎤 Reconocimiento de voz</li>
-            <li>⏱️ Sesiones de 15 minutos enfocadas</li>
-            <li>🔒 Solo contenido ICFES</li>
-            <li>🌐 Español, English, Português</li>
-        </ul>
-    </div>
-    """, unsafe_allow_html=True)
+        st.divider()
+        elapsed = time.time() - st.session_state.started_at if st.session_state.started_at else 0
+        remaining = max(0, 15 * 60 - int(elapsed))
+        st.progress(remaining / (15 * 60), text=f"Sesión orientada {remaining // 60:02d}:{remaining % 60:02d}")
+        if st.button("Reconfigurar perfil", use_container_width=True):
+            st.session_state.configured = False
+            st.rerun()
+
+
+def guided():
+    st.subheader("Práctica guiada")
+    st.markdown("<div class='card method'><strong>Método 2+2+1:</strong> identifica los datos, descarta dos distractores, compara los dos restantes y justifica tu elección. El tutor no se adelanta a tu razonamiento.</div>", unsafe_allow_html=True)
+    for message in st.session_state.chat:
+        with st.chat_message(message["role"], avatar="🎓" if message["role"] == "assistant" else "👨‍🎓"):
+            st.markdown(message["content"])
+    prompt = st.chat_input("Escribe una pregunta de Saber 11...")
+    if prompt:
+        st.session_state.chat.append({"role": "user", "content": prompt})
+        messages = [{"role": "system", "content": system_prompt()}] + st.session_state.chat[-10:]
+        with st.chat_message("assistant", avatar="🎓"):
+            with st.spinner("Preparando una guía breve..."):
+                answer = ask_model(messages) or "No pude conectar con el tutor. Inténtalo nuevamente en unos segundos."
+                st.markdown(answer)
+        st.session_state.chat.append({"role": "assistant", "content": answer})
+        st.rerun()
+
+
+def analysis():
+    st.subheader("Analizar una pregunta")
+    st.write("Pega el enunciado y sus opciones. El tutor te ayudará a razonar sin revelar la respuesta de inmediato.")
+    with st.form("analysis"):
+        area = st.selectbox("Área", list(AREAS))
+        question = st.text_area("Enunciado", height=150)
+        options = st.text_area("Opciones A, B, C y D", height=120, placeholder="A. ...\nB. ...\nC. ...\nD. ...")
+        submitted = st.form_submit_button("Iniciar análisis", use_container_width=True)
+    if submitted and question.strip():
+        prompt = f"Área: {area}\nEnunciado: {question}\nOpciones:\n{options}"
+        messages = [{"role": "system", "content": system_prompt()}, {"role": "user", "content": "Aplica el método 2+2+1 a esta pregunta. No reveles todavía la respuesta.\n" + prompt}]
+        with st.spinner("Identificando competencia y distractores..."):
+            st.session_state.analysis = ask_model(messages) or "No pude analizar la pregunta en este momento."
+    if st.session_state.analysis:
+        st.markdown(f"<div class='card'>{st.session_state.analysis}</div>", unsafe_allow_html=True)
+
+
+def simulations():
+    st.subheader("Tres simulacros sin ayuda")
+    st.warning("Durante un simulacro no hay pistas ni tutor. La discusión se habilita al finalizar.")
+    areas = ["Todas las áreas"] + list(AREAS)
+    for number in range(1, 4):
+        key = f"sim_{number}"
+        sim = st.session_state.simulations.get(key)
+        st.markdown(f"### Simulacro {number}")
+        if not sim:
+            area = st.selectbox("Área", areas, key=f"area_{key}")
+            if st.button(f"Iniciar simulacro {number}", key=f"start_{key}"):
+                with st.spinner("Preparando preguntas..."):
+                    st.session_state.simulations[key] = {"status": "active", "area": area, "questions": generate_questions(area), "answers": {}}
+                st.rerun()
+            continue
+        if sim["status"] == "active":
+            with st.form(f"exam_{key}"):
+                answers = {}
+                for index, item in enumerate(sim["questions"]):
+                    st.markdown(f"**{index + 1}. [{item['area']}]** {item['question']}")
+                    answers[item["id"]] = st.radio("Selecciona una opción", item["options"], key=f"choice_{key}_{index}", index=None)
+                finished = st.form_submit_button("Finalizar simulacro", use_container_width=True)
+            if finished:
+                sim["answers"] = answers
+                sim["status"] = "completed"
+                st.rerun()
+        else:
+            score = sum(answer == item["options"][item["correct_index"]] for item in sim["questions"] for answer in [sim["answers"].get(item["id"])])
+            total = len(sim["questions"])
+            st.success(f"Resultado: {score}/{total} ({round(score / total * 100)}%).")
+            if st.button(f"Discutir respuestas del simulacro {number}", key=f"review_{key}"):
+                st.session_state.mode = "Práctica guiada"
+                st.session_state.chat.append({"role": "user", "content": "Quiero discutir mis errores del simulacro aplicando el método 2+2+1."})
+                st.rerun()
+            with st.expander("Ver revisión"):
+                for index, item in enumerate(sim["questions"]):
+                    chosen = sim["answers"].get(item["id"]) or "Sin respuesta"
+                    correct = item["options"][item["correct_index"]]
+                    st.markdown(f"**{index + 1}.** Tu respuesta: {chosen} · Correcta: {correct}")
+                    if chosen != correct:
+                        st.caption(item["explanation"])
+
+
+def resources():
+    st.subheader("Recursos oficiales")
+    st.write("La base de conocimiento debe priorizar fuentes oficiales, fechadas y verificables.")
+    for title, url in RESOURCES:
+        st.markdown(f"- [{title}]({url})")
+    st.info("En la siguiente fase agregaremos búsqueda documentada y fragmentos relevantes, sin enviar libros completos en cada turno.")
+
+
+header()
+if not st.session_state.configured:
+    setup()
     st.stop()
 
-# TEMPORIZADOR
-elapsed = time.time() - st.session_state.start_time if st.session_state.start_time else 0
-progress = elapsed / st.session_state.time_limit
-
-if progress >= 1:
-    st.error("### ⏰ Sesión finalizada (15 minutos)")
-    if st.button("🔄 Nueva Sesión"):
-        for key in ['agente_activado', 'start_time', 'messages']:
-            if key in st.session_state:
-                del st.session_state[key]
-        st.rerun()
-    st.stop()
-
-col1, col2, col3 = st.columns([1,3,1])
-with col2:
-    emoji = "🟢" if progress < 0.5 else "🟡" if progress < 0.8 else "🔴"
-    st.progress(min(progress, 1.0), text=f"{emoji} Progreso de sesión (15 min)")
-    if progress > 0.8:
-        st.warning("⚠️ Últimos minutos")
-
-# INTERFAZ
-st.markdown('<div class="main-header">🎓 Tutor Saber 11° - Profesor Marco</div>', unsafe_allow_html=True)
-
-col1, col2, col3 = st.columns([2,2,2])
-with col2:
-    idioma = st.selectbox("🌐 Idioma:", ["Español", "English", "Português"], index=0)
-    lang_codes = {"Español": "es-CO", "English": "en-US", "Português": "pt-BR"}
-    st.session_state.language = lang_codes[idioma]
-
-if len(st.session_state.messages) == 0:
-    welcome = "¡Hola! Soy el Profesor Marco 👨‍🏫. Estoy aquí para ayudarte con la Prueba Saber 11°. ¿En qué área necesitas ayuda?"
-    st.session_state.messages = [
-        {"role": "system", "content": "Eres Profesor Marco, experto ICFES Colombia. Solo respondes: Matemáticas, Lectura Crítica, Ciencias Naturales, Ciencias Sociales, Inglés. Estructura: Concepto→Explicación→Ejemplo→Tip ICFES."},
-        {"role": "assistant", "content": welcome}
-    ]
-
-# Chat
-for i, msg in enumerate(st.session_state.messages):
-    if msg['role'] == 'system':
-        continue
-    elif msg['role'] == 'user':
-        with st.chat_message("user", avatar="👨‍🎓"):
-            st.write(msg['content'])
-    else:
-        with st.chat_message("assistant", avatar="👨‍🏫"):
-            st.write(msg['content'])
-            if st.button("🔊 Escuchar", key=f"tts_{i}"):
-                texto = msg['content'].replace('"', '\\"').replace('\n', ' ')
-                st.components.v1.html(f"""
-                <script>
-                    if ('speechSynthesis' in window) {{
-                        var msg = new SpeechSynthesisUtterance();
-                        msg.text = "{texto}";
-                        msg.lang = "{st.session_state.language}";
-                        msg.rate = 0.9;
-                        window.speechSynthesis.speak(msg);
-                    }}
-                </script>
-                """, height=0)
-
-# Input
-prompt = st.chat_input("Escribe tu pregunta sobre Saber 11°...")
-if prompt:
-    es_valido, error = validar(prompt)
-    if not es_valido:
-        st.markdown(f"<div class='warning-box'>{error}</div>", unsafe_allow_html=True)
-    else:
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("assistant", avatar="👨‍🏫"):
-            with st.spinner("🧠 Profesor Marco está pensando..."):
-                try:
-                    client = get_client()
-                    api_messages = [{"role": m['role'], "content": m['content']} for m in st.session_state.messages if m['role'] != 'system']
-                    api_messages.insert(0, {"role": "system", "content": "Eres Profesor Marco, experto ICFES. Solo temas de Matemáticas, Lectura, Ciencias Naturales, Ciencias Sociales, Inglés."})
-                    
-                    response = client.chat.completions.create(
-                        model="llama-3.3-70b-versatile",
-                        messages=api_messages,
-                        temperature=0.7,
-                        max_tokens=2048
-                    )
-                    respuesta = response.choices[0].message.content
-                    st.write(respuesta)
-                    st.session_state.messages.append({"role": "assistant", "content": respuesta})
-                except Exception as e:
-                    st.error(f"Error: {str(e)}")
-        st.rerun()
+sidebar()
+if st.session_state.mode == "Práctica guiada":
+    guided()
+elif st.session_state.mode == "Analizar una pregunta":
+    analysis()
+elif st.session_state.mode == "Simulacros":
+    simulations()
+else:
+    resources()
 
 st.divider()
-st.markdown('<div style="text-align:center; color:#666; font-size:0.8rem;">🔒 Tutor ICFES | Profesor Marco | Groq AI</div>', unsafe_allow_html=True)
+started = datetime.fromtimestamp(st.session_state.started_at).strftime("%H:%M") if st.session_state.started_at else ""
+st.caption(f"Ruta Saber 11 · Profesor Marco · Sesión iniciada {started}")
