@@ -61,11 +61,25 @@ st.markdown(
       .hero-avatar { width:100%; max-width:280px; aspect-ratio:1; object-fit:cover; border-radius:22px; border:3px solid rgba(255,255,255,.55); box-shadow:0 18px 35px rgba(0,0,0,.22); }
       .card { background:rgba(255,255,255,.82); border:1px solid #d6e1e9; border-radius:18px; padding:1.2rem 1.4rem; margin:.6rem 0; }
       .method { border-left:5px solid var(--gold); }
+      .setup-intro { position:relative; overflow:hidden; color:white; margin:1.25rem 0 1rem; padding:1.45rem 1.65rem; border-radius:24px; background:linear-gradient(135deg,#10253f 0%,#176fa8 68%,#2395c8 100%); box-shadow:0 16px 34px rgba(16,37,63,.16); }
+      .setup-intro::after { content:''; position:absolute; width:180px; height:180px; right:-55px; top:-82px; border:28px solid rgba(255,255,255,.12); border-radius:50%; }
+      .setup-kicker { position:relative; z-index:1; color:#f0c363; font-size:.76rem; font-weight:800; letter-spacing:.18em; text-transform:uppercase; }
+      .setup-intro h2 { position:relative; z-index:1; color:white !important; margin:.35rem 0 .35rem; font-size:clamp(1.7rem,3vw,2.35rem); }
+      .setup-intro p { position:relative; z-index:1; color:#e5f0f7 !important; margin:0; font-size:1.05rem; }
+      .route-chips { position:relative; z-index:1; display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1rem; }
+      .route-chip { display:inline-flex; align-items:center; padding:.42rem .72rem; border:1px solid rgba(255,255,255,.3); border-radius:999px; color:#f7fbff; background:rgba(255,255,255,.12); font-size:.82rem; font-weight:700; }
+      [data-testid="stForm"] { padding:1.35rem 1.45rem 1.15rem; border:1px solid #c8dce9; border-radius:24px; background:rgba(255,255,255,.78); box-shadow:0 12px 28px rgba(16,37,63,.08); }
+      [data-testid="stForm"] button { background:linear-gradient(135deg,#176fa8,#0f84c5) !important; color:white !important; border:0 !important; box-shadow:0 10px 20px rgba(23,111,168,.22); transition:transform .2s ease, box-shadow .2s ease; }
+      [data-testid="stForm"] button:hover { transform:translateY(-2px); box-shadow:0 14px 24px rgba(23,111,168,.3); }
       .stButton > button { border-radius:999px; font-weight:700; }
       .stTextInput label, .stSelectbox label { color:#10253f !important; font-weight:700 !important; }
       .stTextInput input, .stSelectbox [data-baseweb="select"] > div { background:#dcecf8 !important; color:#10253f !important; border-color:#a9cfe8 !important; }
       .stTextInput input::placeholder { color:#536b7d !important; opacity:1 !important; }
       .stSelectbox [data-baseweb="select"] div, .stSelectbox [data-baseweb="select"] svg { color:#10253f !important; fill:#10253f !important; }
+      [data-testid="stFileUploaderDropzone"] { background:#dcecf8 !important; border:1px solid #a9cfe8 !important; border-radius:999px !important; transition:background .2s ease, border-color .2s ease, transform .2s ease; }
+      [data-testid="stFileUploaderDropzone"]:hover { background:#c9e3f3 !important; border-color:#176fa8 !important; transform:translateY(-1px); }
+      [data-testid="stFileUploaderDropzone"] button { background:#176fa8 !important; color:white !important; border:0 !important; border-radius:999px !important; font-weight:700 !important; }
+      [data-testid="stFileUploaderDropzone"] small, [data-testid="stFileUploaderDropzone"] span { color:#10253f !important; }
       @media (max-width: 700px) { .hero-grid { grid-template-columns:1fr; } .hero-avatar { max-width:220px; } }
     </style>
     """,
@@ -178,8 +192,10 @@ def header():
 
 
 def setup():
-    st.markdown("### Configura tu ruta")
-    st.write("Estos datos permiten adaptar la dificultad y el acompañamiento.")
+    st.markdown(
+        "<div class='setup-intro'><div class='setup-kicker'>Tu preparación, a tu medida</div><h2>Configura tu ruta</h2><p>Cuéntame un poco sobre ti para adaptar la dificultad, las estrategias y el acompañamiento.</p><div class='route-chips'><span class='route-chip'>Nivel personalizado</span><span class='route-chip'>Cinco áreas Saber 11</span><span class='route-chip'>Progreso guiado</span></div></div>",
+        unsafe_allow_html=True,
+    )
     with st.form("setup"):
         name = st.text_input("Nombre", value=st.session_state.student_name, placeholder="Ej. Laura")
         grades = ["9°", "10°", "11°", "Egresado"]
@@ -237,14 +253,26 @@ def guided():
 
 def analysis():
     st.subheader("Analizar una pregunta")
-    st.write("Pega el enunciado y sus opciones. El tutor te ayudará a razonar sin revelar la respuesta de inmediato.")
+    st.write("Pega el enunciado y sus opciones, o adjunta una imagen/PDF. El tutor te ayudará a razonar sin revelar la respuesta de inmediato.")
+    attachment = st.file_uploader(
+        "📎 Adjuntar imagen o PDF",
+        type=["png", "jpg", "jpeg", "webp", "pdf"],
+        key="analysis_attachment",
+        help="Puedes adjuntar una captura de la pregunta, sus opciones o un PDF corto.",
+    )
+    if attachment:
+        if attachment.type.startswith("image/"):
+            st.image(attachment, caption=f"Adjunto: {attachment.name}", use_container_width=True)
+        else:
+            st.info(f"PDF adjunto: {attachment.name}. Incluye también el enunciado o las opciones en el campo de texto para orientar el análisis.")
     with st.form("analysis"):
         area = st.selectbox("Área", list(AREAS))
         question = st.text_area("Enunciado", height=150)
         options = st.text_area("Opciones A, B, C y D", height=120, placeholder="A. ...\nB. ...\nC. ...\nD. ...")
         submitted = st.form_submit_button("Iniciar análisis", use_container_width=True)
-    if submitted and question.strip():
-        prompt = f"Área: {area}\nEnunciado: {question}\nOpciones:\n{options}"
+    if submitted and (question.strip() or attachment):
+        attachment_note = f"\nArchivo adjunto: {attachment.name}. No describas su contenido si no puedes verificarlo." if attachment else ""
+        prompt = f"Área: {area}\nEnunciado: {question}\nOpciones:\n{options}{attachment_note}"
         messages = [{"role": "system", "content": system_prompt()}, {"role": "user", "content": "Aplica el método 2+2+1 a esta pregunta. No reveles todavía la respuesta.\n" + prompt}]
         with st.spinner("Identificando competencia y distractores..."):
             st.session_state.analysis = ask_model(messages) or "No pude analizar la pregunta en este momento."
