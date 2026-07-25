@@ -24,6 +24,8 @@ RESOURCES = [
     ("Marcos de referencia", "https://www.icfes.gov.co/marcos-de-referencia-examen-saber-11/"),
 ]
 
+TUTOR_AVATAR_URL = "https://i.postimg.cc/KjzQ9YPT/TUTOR-PRUEBA-SABER-11.png"
+
 
 def init_state():
     values = {
@@ -52,12 +54,15 @@ st.markdown(
       .stApp { background:linear-gradient(135deg,#edf4f8,#fdfbf5); }
       .block-container { max-width:1180px; padding-top:2rem; }
       .hero { background:linear-gradient(135deg,#10253f,#1b6590); color:white; border-radius:24px; padding:2rem 2.4rem; margin-bottom:1rem; }
+      .hero-grid { display:grid; grid-template-columns:minmax(0,1fr) 280px; gap:2rem; align-items:center; }
       .hero h1 { color:white; margin:0; font-size:clamp(2rem,5vw,3.7rem); }
       .hero p { color:#e5edf4; font-size:1.08rem; max-width:800px; }
       .eyebrow { color:#f0c363; font-weight:700; letter-spacing:.18em; text-transform:uppercase; }
+      .hero-avatar { width:100%; max-width:280px; aspect-ratio:1; object-fit:cover; border-radius:22px; border:3px solid rgba(255,255,255,.55); box-shadow:0 18px 35px rgba(0,0,0,.22); }
       .card { background:rgba(255,255,255,.82); border:1px solid #d6e1e9; border-radius:18px; padding:1.2rem 1.4rem; margin:.6rem 0; }
       .method { border-left:5px solid var(--gold); }
       .stButton > button { border-radius:999px; font-weight:700; }
+      @media (max-width: 700px) { .hero-grid { grid-template-columns:1fr; } .hero-avatar { max-width:220px; } }
     </style>
     """,
     unsafe_allow_html=True,
@@ -162,7 +167,10 @@ Genera {count} preguntas originales estilo Saber 11 para grado {st.session_state
 
 
 def header():
-    st.markdown(f"<section class='hero'><div class='eyebrow'>Ruta Saber 11</div><h1>Profesor Marco</h1><p>Un guía para comprender las preguntas, tomar decisiones y mejorar tus estrategias en las cinco pruebas.</p><p style='color:#dcecf5'>{profile()}</p></section>", unsafe_allow_html=True)
+    st.markdown(
+        f"<section class='hero hero-grid'><div><div class='eyebrow'>Ruta Saber 11</div><h1>Profesor Marco</h1><p>Un guía para comprender las preguntas, tomar decisiones y mejorar tus estrategias en las cinco pruebas.</p><p style='color:#dcecf5'>{profile()}</p></div><img class='hero-avatar' src='{TUTOR_AVATAR_URL}' alt='Profesor Marco, tutor de Prueba Saber 11'></section>",
+        unsafe_allow_html=True,
+    )
 
 
 def setup():
