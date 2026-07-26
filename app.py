@@ -243,14 +243,11 @@ def setup():
         name = st.text_input("Nombre", value=st.session_state.student_name, placeholder="Ej. Laura")
         grades = ["9°", "10°", "11°", "Egresado"]
         grade = st.selectbox("Grado", grades, index=grades.index(st.session_state.grade))
-        areas = ["Todas las áreas"] + list(AREAS)
-        area = st.selectbox("Área inicial", areas, index=areas.index(st.session_state.focus_area))
         date = st.text_input("Fecha aproximada del examen (opcional)", value=st.session_state.target_date, placeholder="Ej. agosto de 2026")
         submitted = st.form_submit_button("Comenzar ruta", use_container_width=True)
     if submitted:
         st.session_state.student_name = name.strip()
         st.session_state.grade = grade
-        st.session_state.focus_area = area
         st.session_state.target_date = date.strip()
         st.session_state.configured = True
         st.session_state.started_at = time.time()
@@ -299,6 +296,17 @@ def guided():
 def analysis():
     st.subheader("Analizar una pregunta")
     st.write("Pega el enunciado y sus opciones, o adjunta una imagen/PDF. El tutor te ayudará a razonar sin revelar la respuesta de inmediato.")
+    areas = ["Todas las áreas"] + list(AREAS)
+    current_area = st.session_state.focus_area if st.session_state.focus_area in areas else areas[0]
+    area = st.selectbox(
+        "Asignatura que estás repasando",
+        areas,
+        index=areas.index(current_area),
+        key="practice_area",
+        help="Puedes cambiar de asignatura en cualquier momento sin salir de la práctica.",
+    )
+    if area != st.session_state.focus_area:
+        st.session_state.focus_area = area
     st.markdown("<div class='attach-hint'>Arrastra aquí una captura de pantalla de cualquier pregunta o selecciónala desde tu dispositivo.</div>", unsafe_allow_html=True)
     pasted_value = PASTE_CAPTURE(key="analysis_paste_capture")
     pasted_attachment = decode_pasted_image(pasted_value)
@@ -320,7 +328,6 @@ def analysis():
             st.info(f"PDF adjunto: {attachment_name}. Incluye también el enunciado o las opciones en el campo de texto para orientar el análisis.")
         st.info("Ahora selecciona el área, escribe el enunciado y las opciones si las tienes, y pulsa «Iniciar análisis».")
     with st.form("analysis"):
-        area = st.selectbox("Área", list(AREAS))
         question = st.text_area("Enunciado", height=150)
         options = st.text_area("Opciones A, B, C y D", height=120, placeholder="A. ...\nB. ...\nC. ...\nD. ...")
         submitted = st.form_submit_button("Iniciar análisis", use_container_width=True)
