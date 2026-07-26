@@ -45,6 +45,7 @@ def init_state():
         "started_at": None,
         "chat": [],
         "analysis": None,
+        "model_error": None,
         "simulations": {},
     }
     for key, value in values.items():
@@ -101,11 +102,10 @@ st.markdown(
       .stTextArea textarea { background:#dcecf8 !important; color:#10253f !important; border:1px solid #a9cfe8 !important; border-radius:16px !important; }
       .stTextArea textarea::placeholder { color:#536b7d !important; opacity:1 !important; }
       .stTextArea textarea:focus { border-color:#176fa8 !important; box-shadow:0 0 0 2px rgba(23,111,168,.16) !important; }
-      [data-testid="stFileUploaderDropzone"], [data-testid="stFileUploader"] section[data-testid="stFileUploaderDropzone"] { background:#dcecf8 !important; border:1px solid #a9cfe8 !important; border-radius:999px !important; transition:background .2s ease, border-color .2s ease, transform .2s ease; }
-      [data-testid="stFileUploaderDropzone"]:hover, [data-testid="stFileUploader"] section[data-testid="stFileUploaderDropzone"]:hover { background:#c9e3f3 !important; border-color:#176fa8 !important; transform:translateY(-1px); }
-      [data-testid="stFileUploaderDropzone"] > div, [data-testid="stFileUploader"] section[data-testid="stFileUploaderDropzone"] > div { background:transparent !important; }
-      [data-testid="stFileUploaderDropzone"] button, [data-testid="stFileUploader"] button { background:#176fa8 !important; color:white !important; border:0 !important; border-radius:999px !important; font-weight:700 !important; }
-      [data-testid="stFileUploaderDropzone"] small, [data-testid="stFileUploaderDropzone"] span, [data-testid="stFileUploader"] small, [data-testid="stFileUploader"] span { color:#10253f !important; }
+      .attachment-preview { display:flex; align-items:center; gap:.9rem; padding:.75rem 1rem; margin:.7rem 0; border:1px solid #a9cfe8; border-radius:14px; background:#eaf5fc; color:#10253f; }
+      .attachment-preview strong { color:#10253f; }
+      .download-row { display:flex; flex-wrap:wrap; gap:.65rem; margin:.8rem 0 1.1rem; }
+      .download-row small { color:#536b7d; align-self:center; }
       @media (max-width: 700px) { .hero-grid { grid-template-columns:1fr; } .hero-avatar { max-width:220px; } }
     </style>
     """,
@@ -124,16 +124,30 @@ def client():
 
 
 def ask_model(messages, max_tokens=850, temperature=0.25):
+    st.session_state.model_error = None
     api = client()
     if api is None:
+        st.session_state.model_error = "No hay una clave de IA configurada en Render. Revisa GROQ_API_KEY u OPENAI_API_KEY en las variables de entorno."
         return None
-    response = api.chat.completions.create(
-        model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
-        messages=messages,
-        temperature=temperature,
-        max_tokens=max_tokens,
-    )
-    return response.choices[0].message.content.strip()
+    try:
+        response = api.chat.completions.create(
+            model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return response.choices[0].message.content.strip()
+    except openai.AuthenticationError:
+        st.session_state.model_error = "La clave de IA configurada en Render no es válida o fue desactivada. Actualiza la variable correspondiente y vuelve a desplegar."
+    except openai.RateLimitError:
+        st.session_state.model_error = "La cuenta de IA alcanzó su límite temporal. Inténtalo de nuevo más tarde o revisa el plan y la facturación."
+    except openai.APIConnectionError:
+        st.session_state.model_error = "No se pudo conectar con el servicio de IA. Espera unos segundos y vuelve a intentarlo."
+    except openai.OpenAIError:
+        st.session_state.model_error = "El servicio de IA devolvió un error. Revisa la configuración del modelo e inténtalo nuevamente."
+    except Exception:
+        st.session_state.model_error = "No se pudo completar el análisis. Revisa la configuración del servicio e inténtalo nuevamente."
+    return None
 
 
 def profile():
@@ -169,8 +183,8 @@ def parse_json(text):
     return None
 
 
-def decode_pasted_image(value):
-    if not isinstance(value, dict) or value.get("type") != "image":
+def decode_attachment(value):
+    if not isinstance(value, dict) or value.get("type") not in {"image", "file"}:
         return None
     data_url = str(value.get("data", ""))
     if "," not in data_url:
@@ -179,11 +193,29 @@ def decode_pasted_image(value):
         encoded = data_url.split(",", 1)[1]
         return {
             "name": str(value.get("name", "captura.png")),
-            "type": str(value.get("mimeType", "image/png")),
+            "type": str(value.get("mimeType", "application/octet-stream")),
             "bytes": base64.b64decode(encoded),
         }
     except (ValueError, TypeError):
         return None
+
+
+def attachment_bytes(attachment):
+    if isinstance(attachment, dict):
+        return attachment["bytes"]
+    return attachment.getvalue()
+
+
+def attachment_name(attachment):
+    if isinstance(attachment, dict):
+        return attachment["name"]
+    return attachment.name
+
+
+def attachment_type(attachment):
+    if isinstance(attachment, dict):
+        return attachment["type"]
+    return attachment.type
 
 
 def fallback(area, index):
@@ -307,39 +339,54 @@ def analysis():
     )
     if area != st.session_state.focus_area:
         st.session_state.focus_area = area
-    st.markdown("<div class='attach-hint'>Arrastra aquí una captura de pantalla de cualquier pregunta o selecciónala desde tu dispositivo.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='attach-hint'>Adjunta la pregunta como captura, imagen o PDF. También puedes pegar una captura con Ctrl + V.</div>", unsafe_allow_html=True)
     pasted_value = PASTE_CAPTURE(key="analysis_paste_capture")
-    pasted_attachment = decode_pasted_image(pasted_value)
-    uploaded_attachment = st.file_uploader(
-        "📎 Arrastra y suelta una captura o haz clic para adjuntarla",
-        type=["png", "jpg", "jpeg", "webp", "gif", "bmp", "pdf"],
-        key="analysis_attachment",
-        accept_multiple_files=False,
-        help="Formatos aceptados: PNG, JPG, JPEG, WEBP, GIF, BMP y PDF.",
-    )
-    attachment = pasted_attachment or uploaded_attachment
+    attachment = decode_attachment(pasted_value)
     if attachment:
-        attachment_type = attachment["type"] if isinstance(attachment, dict) else attachment.type
-        attachment_name = attachment["name"] if isinstance(attachment, dict) else attachment.name
-        if attachment_type.startswith("image/"):
-            image_data = attachment["bytes"] if isinstance(attachment, dict) else attachment
-            st.image(image_data, caption=f"Adjunto: {attachment_name}", use_column_width=True)
+        file_type = attachment_type(attachment)
+        file_name = attachment_name(attachment)
+        if file_type.startswith("image/"):
+            st.image(attachment_bytes(attachment), caption=f"Vista previa: {file_name}", use_column_width=True)
+        elif file_type == "application/pdf":
+            st.info(f"PDF listo: {file_name}. Escribe también el enunciado o las opciones si deseas orientar el análisis.")
         else:
-            st.info(f"PDF adjunto: {attachment_name}. Incluye también el enunciado o las opciones en el campo de texto para orientar el análisis.")
-        st.info("Ahora selecciona el área, escribe el enunciado y las opciones si las tienes, y pulsa «Iniciar análisis».")
+            st.info(f"Archivo listo: {file_name}. Escribe el enunciado o las opciones para orientar el análisis.")
+        st.markdown(f"<div class='attachment-preview'><span>📎</span><strong>{file_name}</strong><span>Archivo preparado para enviar</span></div>", unsafe_allow_html=True)
     with st.form("analysis"):
         question = st.text_area("Enunciado", height=150)
         options = st.text_area("Opciones A, B, C y D", height=120, placeholder="A. ...\nB. ...\nC. ...\nD. ...")
         submitted = st.form_submit_button("Iniciar análisis", use_container_width=True)
-    if submitted and (question.strip() or attachment):
-        attachment_name = attachment["name"] if isinstance(attachment, dict) else attachment.name
-        attachment_note = f"\nArchivo adjunto: {attachment_name}. No describas su contenido si no puedes verificarlo." if attachment else ""
+    if submitted and (question.strip() or options.strip() or attachment):
+        file_name = attachment_name(attachment) if attachment else ""
+        attachment_note = f"\nArchivo adjunto: {file_name}. No describas su contenido si no puedes verificarlo." if attachment else ""
         prompt = f"Área: {area}\nEnunciado: {question}\nOpciones:\n{options}{attachment_note}"
         messages = [{"role": "system", "content": system_prompt()}, {"role": "user", "content": "Aplica el método 2+2+1 a esta pregunta. No reveles todavía la respuesta.\n" + prompt}]
         with st.spinner("Identificando competencia y distractores..."):
-            st.session_state.analysis = ask_model(messages) or "No pude analizar la pregunta en este momento."
+            result = ask_model(messages)
+            st.session_state.analysis = result or f"**No se pudo iniciar el análisis.**\n\n{st.session_state.model_error or 'Inténtalo nuevamente en unos segundos.'}"
+    elif submitted:
+        st.warning("Escribe el enunciado, las opciones o adjunta una imagen/PDF antes de iniciar el análisis.")
     if st.session_state.analysis:
         st.markdown(f"<div class='card'>{st.session_state.analysis}</div>", unsafe_allow_html=True)
+        st.markdown("<div class='download-row'>Descarga o copia el resultado para estudiarlo después.</div>", unsafe_allow_html=True)
+        col1, col2 = st.columns(2)
+        with col1:
+            st.download_button(
+                "Descargar análisis (.txt)",
+                data=st.session_state.analysis,
+                file_name="analisis-saber-11.txt",
+                mime="text/plain",
+                use_container_width=True,
+            )
+        if attachment:
+            with col2:
+                st.download_button(
+                    "Descargar archivo adjunto",
+                    data=attachment_bytes(attachment),
+                    file_name=attachment_name(attachment),
+                    mime=attachment_type(attachment),
+                    use_container_width=True,
+                )
 
 
 def simulations():
