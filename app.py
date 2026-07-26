@@ -90,6 +90,11 @@ st.markdown(
       .route-chips { position:relative; z-index:1; display:flex; flex-wrap:wrap; gap:.5rem; margin-top:1rem; }
       .route-chip { display:inline-flex; align-items:center; padding:.42rem .72rem; border:1px solid rgba(255,255,255,.3); border-radius:999px; color:#f7fbff; background:rgba(255,255,255,.12); font-size:.82rem; font-weight:700; }
       .attach-hint { color:#536b7d; margin:.45rem 0 .25rem; font-size:.94rem; }
+      .attachment-step { color:#10253f; margin:.9rem 0 .45rem; font-size:1rem; font-weight:800; }
+      .attachment-actions { display:flex; flex-wrap:wrap; gap:.55rem; margin:.35rem 0 .65rem; }
+      .attachment-action { display:inline-flex; align-items:center; gap:.35rem; padding:.5rem .75rem; border:1px solid #a9cfe8; border-radius:999px; background:#eaf5fc; color:#10253f; font-size:.84rem; font-weight:700; }
+      .attachment-action strong { color:#176fa8; }
+      .attachment-download { margin:.6rem 0 .8rem; padding:.7rem .9rem; border:1px solid #a9cfe8; border-radius:14px; background:#f4fbff; color:#10253f; }
       [data-testid="stForm"] { padding:1.35rem 1.45rem 1.15rem; border:1px solid #c8dce9; border-radius:24px; background:rgba(255,255,255,.78); box-shadow:0 12px 28px rgba(16,37,63,.08); }
       [data-testid="stForm"] button { background:linear-gradient(135deg,#176fa8,#0f84c5) !important; color:white !important; border:0 !important; box-shadow:0 10px 20px rgba(23,111,168,.22); transition:transform .2s ease, box-shadow .2s ease; }
       [data-testid="stForm"] button:hover { transform:translateY(-2px); box-shadow:0 14px 24px rgba(23,111,168,.3); }
@@ -184,6 +189,10 @@ def parse_json(text):
 
 
 def decode_attachment(value):
+    if not isinstance(value, dict):
+        return None
+    if value.get("type") == "composer":
+        value = value.get("attachment")
     if not isinstance(value, dict) or value.get("type") not in {"image", "file"}:
         return None
     data_url = str(value.get("data", ""))
@@ -339,9 +348,20 @@ def analysis():
     )
     if area != st.session_state.focus_area:
         st.session_state.focus_area = area
-    st.markdown("<div class='attach-hint'>Adjunta la pregunta como captura, imagen o PDF. También puedes pegar una captura con Ctrl + V.</div>", unsafe_allow_html=True)
-    pasted_value = PASTE_CAPTURE(key="analysis_paste_capture")
-    attachment = decode_attachment(pasted_value)
+    st.markdown(
+        "<div class='attachment-step'>1. Adjunta la pregunta si la tienes como imagen o archivo</div>"
+        "<div class='attachment-actions'>"
+        "<span class='attachment-action'><strong>↥</strong> Arrastra y suelta</span>"
+        "<span class='attachment-action'><strong>Ctrl + V</strong> Pega una captura</span>"
+        "<span class='attachment-action'><strong>＋</strong> Explora archivos</span>"
+        "<span class='attachment-action'>PNG · JPG · PDF · TXT</span>"
+        "</div>"
+        "<div class='attach-hint'>La vista previa aparecerá aquí antes de iniciar el análisis.</div>",
+        unsafe_allow_html=True,
+    )
+    composer_value = PASTE_CAPTURE(key="analysis_paste_capture")
+    question = str(composer_value.get("text", "")) if isinstance(composer_value, dict) else ""
+    attachment = decode_attachment(composer_value)
     if attachment:
         file_type = attachment_type(attachment)
         file_name = attachment_name(attachment)
@@ -352,8 +372,17 @@ def analysis():
         else:
             st.info(f"Archivo listo: {file_name}. Escribe el enunciado o las opciones para orientar el análisis.")
         st.markdown(f"<div class='attachment-preview'><span>📎</span><strong>{file_name}</strong><span>Archivo preparado para enviar</span></div>", unsafe_allow_html=True)
-    with st.form("analysis"):
-        question = st.text_area("Enunciado", height=150)
+        st.markdown("<div class='attachment-download'><strong>Archivo cargado</strong><br>También puedes descargar una copia del archivo antes de continuar.</div>", unsafe_allow_html=True)
+        st.download_button(
+            "Descargar archivo adjunto",
+            data=attachment_bytes(attachment),
+            file_name=attachment_name(attachment),
+            mime=attachment_type(attachment),
+            key="download_question_attachment",
+            use_container_width=True,
+        )
+    st.markdown("<div class='attachment-step'>2. Enunciado y opciones</div>", unsafe_allow_html=True)
+    with st.form("analysis_form"):
         options = st.text_area("Opciones A, B, C y D", height=120, placeholder="A. ...\nB. ...\nC. ...\nD. ...")
         submitted = st.form_submit_button("Iniciar análisis", use_container_width=True)
     if submitted and (question.strip() or options.strip() or attachment):
@@ -369,24 +398,13 @@ def analysis():
     if st.session_state.analysis:
         st.markdown(f"<div class='card'>{st.session_state.analysis}</div>", unsafe_allow_html=True)
         st.markdown("<div class='download-row'>Descarga o copia el resultado para estudiarlo después.</div>", unsafe_allow_html=True)
-        col1, col2 = st.columns(2)
-        with col1:
-            st.download_button(
-                "Descargar análisis (.txt)",
-                data=st.session_state.analysis,
-                file_name="analisis-saber-11.txt",
-                mime="text/plain",
-                use_container_width=True,
-            )
-        if attachment:
-            with col2:
-                st.download_button(
-                    "Descargar archivo adjunto",
-                    data=attachment_bytes(attachment),
-                    file_name=attachment_name(attachment),
-                    mime=attachment_type(attachment),
-                    use_container_width=True,
-                )
+        st.download_button(
+            "Descargar análisis (.txt)",
+            data=st.session_state.analysis,
+            file_name="analisis-saber-11.txt",
+            mime="text/plain",
+            use_container_width=True,
+        )
 
 
 def simulations():
