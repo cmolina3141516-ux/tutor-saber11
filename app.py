@@ -41,7 +41,7 @@ def init_state():
         "grade": "11°",
         "target_date": "",
         "focus_area": "Todas las áreas",
-        "mode": "Práctica guiada",
+        "mode": "Analizar una pregunta",
         "started_at": None,
         "chat": [],
         "analysis": None,
@@ -262,7 +262,9 @@ def sidebar():
     with st.sidebar:
         st.markdown("## Tu ruta")
         st.caption(f"{st.session_state.student_name or 'Sin nombre'} · {st.session_state.grade}")
-        modes = ["Práctica guiada", "Analizar una pregunta", "Simulacros", "Recursos oficiales"]
+        modes = ["Analizar una pregunta", "Simulacros", "Recursos oficiales"]
+        if st.session_state.mode not in modes:
+            st.session_state.mode = modes[0]
         selected = st.radio("Modo", modes, index=modes.index(st.session_state.mode))
         if selected != st.session_state.mode:
             st.session_state.mode = selected
@@ -364,7 +366,7 @@ def simulations():
             total = len(sim["questions"])
             st.success(f"Resultado: {score}/{total} ({round(score / total * 100)}%).")
             if st.button(f"Discutir respuestas del simulacro {number}", key=f"review_{key}"):
-                st.session_state.mode = "Práctica guiada"
+                st.session_state.mode = "Analizar una pregunta"
                 st.session_state.chat.append({"role": "user", "content": "Quiero discutir mis errores del simulacro aplicando el método 2+2+1."})
                 st.rerun()
             with st.expander("Ver revisión"):
@@ -390,9 +392,7 @@ if not st.session_state.configured:
     st.stop()
 
 sidebar()
-if st.session_state.mode == "Práctica guiada":
-    guided()
-elif st.session_state.mode == "Analizar una pregunta":
+if st.session_state.mode == "Analizar una pregunta":
     analysis()
 elif st.session_state.mode == "Simulacros":
     simulations()
