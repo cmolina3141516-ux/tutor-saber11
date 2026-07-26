@@ -69,6 +69,10 @@ st.markdown(
       .eyebrow { color:#f0c363; font-weight:700; letter-spacing:.18em; text-transform:uppercase; }
       .hero-avatar { width:100%; max-width:280px; aspect-ratio:1; object-fit:cover; border-radius:22px; border:3px solid rgba(255,255,255,.55); box-shadow:0 18px 35px rgba(0,0,0,.22); }
       .card { background:rgba(255,255,255,.82); border:1px solid #d6e1e9; border-radius:18px; padding:1.2rem 1.4rem; margin:.6rem 0; }
+      .card, .card * { color:#10253f !important; }
+      .stApp h3, [data-testid="stChatMessage"] p, [data-testid="stChatMessage"] li, [data-testid="stChatMessage"] strong { color:#10253f !important; }
+      [data-testid="stChatInput"] textarea { color:#10253f !important; background:#dcecf8 !important; }
+      [data-testid="stChatInput"] textarea::placeholder { color:#536b7d !important; opacity:1 !important; }
       .method { border-left:5px solid var(--gold); }
       .setup-intro { position:relative; overflow:hidden; color:white; margin:1.25rem 0 1rem; padding:1.45rem 1.65rem; border-radius:24px; background:linear-gradient(135deg,#10253f 0%,#176fa8 68%,#2395c8 100%); box-shadow:0 16px 34px rgba(16,37,63,.16); }
       .setup-intro::after { content:''; position:absolute; width:180px; height:180px; right:-55px; top:-82px; border:28px solid rgba(255,255,255,.12); border-radius:50%; }
