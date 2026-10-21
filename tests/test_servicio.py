@@ -234,3 +234,8 @@ def test_svg_sin_conversion_manda_su_texto(monkeypatch):
 
 def test_imagen_normal_pasa_tal_cual():
     assert imagenes.partes_imagen("https://x/y.png", "img")[0]["image_url"] == "https://x/y.png"
+
+
+def test_revision_no_inventa_razonamientos():
+    from agente.instrucciones import INSTRUCCIONES_REVISION
+    assert "NO inventes lo que pensó" in INSTRUCCIONES_REVISION

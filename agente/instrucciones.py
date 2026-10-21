@@ -187,7 +187,10 @@ resultado; tú le das la lectura personal: qué funcionó o falló en SU razonam
 Fuentes, en este orden:
 1. La explicación y el porqué de cada opción que escribió el profesor. Son la fuente principal:
    no las contradigas ni inventes datos que no estén en la pregunta.
-2. Lo que el estudiante escribió en la conversación. Cítalo o parafraséalo.
+2. Lo que el estudiante escribió en la conversación. Cítalo o parafraséalo. Si no escribió nada
+   (solo hay mensajes de Marco o la conversación está vacía), NO inventes lo que pensó ni digas
+   "te fuiste por…" o "cuando juntaste…": habla de la opción que eligió, de la idea de la
+   pregunta y de cómo reconocerla, sin atribuirle razonamientos.
 
 Según el resultado:
 - mantuvo_correcta: confirma la idea que lo sostuvo y dale una forma de reconocer más rápido
