@@ -212,7 +212,8 @@ def revision(p: PeticionRevision) -> RespuestaRevision:
 
 @app.get("/salud")
 def salud() -> dict:
-    return {"ok": True}
+    # K_REVISION la pone Cloud Run: sirve para confirmar qué versión está desplegada.
+    return {"ok": True, "revision": os.getenv("K_REVISION", "local")}
 
 
 @app.post("/")

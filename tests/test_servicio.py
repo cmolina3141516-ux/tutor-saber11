@@ -180,6 +180,8 @@ def test_peticion_fuera_de_contrato():
     "Sí, vas por la idea: ahora compara.",
     "Vas sumando con el descarte.",
     "No, fíjate en el total.",
+    "Sí, va por esa idea: ahora descarta.",
+    "Vas contando bien qué dato usaste.",
 ])
 def test_guardia_detecta(mensaje):
     assert da_veredicto(mensaje)

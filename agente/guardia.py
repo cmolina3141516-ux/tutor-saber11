@@ -33,6 +33,7 @@ PATRONES = [
     r"^\W*(?:si|no)\s*[,.!]",
     r"^\W*(?:correcto|correcta|exacto|exacta|exactamente|perfecto|eso es|asi es|muy bien|bien hecho|excelente|acertaste|incorrecto|no exactamente|casi|uy|ojo)\b",
     r"\b(?:acertaste|te equivocaste|estas equivocad[oa]|vas por (?:buen camino|la idea|ahi)|vas bien|vas mal|vas sumando|en lo cierto)\b",
+    r"\bvas \w+ (?:bien|mal)\b",
     r"\b(?:cuidado|estas segur[oa]|seguro que|segura que)\b",
 ]
 
