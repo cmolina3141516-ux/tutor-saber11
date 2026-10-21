@@ -7,7 +7,7 @@ prompt, para que sea siempre la misma regla y gaste pocos tokens.
 
 from .contrato import Contadores, Estudiante
 
-# Con menos preguntas guiadas que esto, los porcentajes todavía no dicen nada.
+# Con menos preguntas repasadas que esto, los porcentajes todavía no dicen nada.
 MINIMO_PARA_JUZGAR = 4
 
 
@@ -18,11 +18,11 @@ def _porcentaje(parte: int, total: int) -> int:
 def _nivel(c: Contadores) -> str:
     if c.guided < MINIMO_PARA_JUZGAR:
         return "sin datos suficientes"
+    # Aciertos en la decisión final de la segunda vuelta.
     aciertos = c.correct / c.guided
-    descartes = c.discardsGood / c.discardsTotal if c.discardsTotal else 0
-    if aciertos >= 0.75 and descartes >= 0.8:
+    if aciertos >= 0.75:
         return "fuerte"
-    if aciertos < 0.45 or descartes < 0.6:
+    if aciertos < 0.45:
         return "necesita apoyo"
     return "en progreso"
 
@@ -31,19 +31,14 @@ def _linea(etiqueta: str, c: Contadores) -> str:
     if c.guided == 0:
         return f"- {etiqueta}: primera vez que trabaja aquí con Marco."
     return (
-        f"- {etiqueta}: {c.guided} preguntas guiadas, {_porcentaje(c.correct, c.guided)} % acertadas, "
-        f"{_porcentaje(c.discardsGood, c.discardsTotal)} % de descartes bien hechos. Nivel: {_nivel(c)}."
+        f"- {etiqueta}: {c.guided} preguntas repasadas con Marco, {_porcentaje(c.correct, c.guided)} % "
+        f"acertadas en la decisión final. Nivel: {_nivel(c)}."
     )
 
 
 def resumen_perfil(estudiante: Estudiante, area: str, componente: str | None) -> str:
     nombre = estudiante.firstName.strip() or "el estudiante"
-    general = Contadores(
-        guided=estudiante.questionsGuided,
-        correct=estudiante.questionsCorrect,
-        discardsTotal=estudiante.discardsTotal,
-        discardsGood=estudiante.discardsGood,
-    )
+    general = Contadores(guided=estudiante.questionsGuided, correct=estudiante.questionsCorrect)
     lineas = [f"Nombre: {nombre}.", _linea("En general", general)]
     lineas.append(_linea(f"En esta área ({area})", estudiante.bySubject.get(area, Contadores())))
     if componente:

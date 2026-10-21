@@ -1,7 +1,12 @@
-"""Servicio HTTP de Marco (contrato v3).
+"""Servicio HTTP de Marco (contrato v4: entrenamiento en dos vueltas).
 
-La plataforma hace POST a la raíz con un turno guiado (mode "guide") o una revisión
-(mode "review") y espera el JSON del contrato en menos de 20 s.
+La plataforma hace POST a la raíz en la segunda vuelta con uno de cuatro modos y espera el JSON
+del contrato en menos de 20 s:
+  hint          -> indicio mayéutico inicial               -> {"reply"}
+  guide         -> respuesta a un mensaje del estudiante   -> {"reply"}
+  key_question  -> la Pregunta clave                       -> {"reply"}
+  review        -> revisión tras la decisión final         -> {"review"}
+En los tres primeros no viajan ni la respuesta correcta ni la de la primera vuelta.
 """
 
 import hmac
@@ -14,19 +19,21 @@ from pydantic import TypeAdapter
 
 from . import instrucciones as ins
 from .contrato import (
-    SIGUIENTE_FASE,
+    Base,
     Peticion,
     PeticionGuia,
+    PeticionIndicio,
+    PeticionPreguntaClave,
     PeticionRevision,
     Pregunta,
-    RespuestaGuia,
+    RespuestaMensaje,
     RespuestaRevision,
 )
 from .guardia import da_veredicto, quitar_interjeccion
 from .imagenes import partes_imagen
 from .modelo import ESFUERZO_GUIA, ESFUERZO_REVISION, ErrorModelo, pedir_json
 from .perfil import resumen_perfil
-from .respaldo import guia_respaldo, razon_respaldo, revision_respaldo
+from .respaldo import respaldo_guiado, revision_respaldo
 
 log = logging.getLogger("marco")
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(levelname)s %(name)s %(message)s")
@@ -40,6 +47,8 @@ MAX_CARACTERES_MENSAJE = 800
 PLAZO_PLATAFORMA_S = 17.0
 # Si el primer intento tardó más que esto, no hay tiempo para pedir otro mensaje.
 TIEMPO_PARA_REINTENTAR_S = 7.0
+# En la segunda vuelta el estudiante puede contar qué marcó: cualquier reacción sería un veredicto.
+FASE_GUARDIA = "segunda_vuelta"
 
 app = FastAPI(title="Marco, tutor socrático Saber 11", docs_url=None, redoc_url=None)
 _peticion = TypeAdapter(Peticion)
@@ -81,7 +90,7 @@ def _contenido_pregunta(q: Pregunta) -> tuple[str, list[dict]]:
     return "\n".join(partes), imagenes
 
 
-def _conversacion(p: PeticionGuia | PeticionRevision) -> str:
+def _conversacion(p: Base) -> str:
     recientes = p.history[-MAX_HISTORIAL:]
     if not recientes:
         return "(todavía no hay conversación)"
@@ -89,90 +98,92 @@ def _conversacion(p: PeticionGuia | PeticionRevision) -> str:
     return "\n".join(f"{quien[m.role]}: {_recortar(m.text)}" for m in recientes)
 
 
-# ---------- Turno guiado ----------
-
-def _estado_guia(p: PeticionGuia) -> str:
-    necesarias = p.question.requiredDiscards
-    descartadas = ", ".join(p.discardedOptions) or "ninguna"
-    turnos = sum(1 for m in p.history if m.role == "student")
-    lineas = [
-        f"Fase actual: {p.phase}",
-        f"Turnos del estudiante en esta pregunta (sin contar este): {turnos}",
-        f"Descartes marcados con el botón: {descartadas} ({len(p.discardedOptions)} de {necesarias} requeridos)",
-    ]
-    if p.phase == "descarte" and len(p.discardedOptions) < necesarias:
-        lineas.append("Todavía NO puedes avanzar: faltan descartes por marcar.")
-    return "\n".join(lineas)
+def _material(p: Base) -> str:
+    textos = [t for t in p.supportTexts if t.text.strip()]
+    if not textos:
+        return ""
+    cuerpo = "\n\n".join(f"{t.title}:\n{_recortar(t.text, 800)}" for t in textos[:3])
+    return (
+        "## Material de apoyo del tema (escrito por el profesor)\n"
+        "Úsalo para que tu mayéutica vaya en la misma línea. No lo copies ni lo resumas al estudiante.\n"
+        f"{cuerpo}"
+    )
 
 
-def _entrada_guia(p: PeticionGuia, aviso: str = "") -> list[dict]:
+# ---------- Modos guiados: hint, guide, key_question ----------
+
+def _tarea(p) -> str:
+    if isinstance(p, PeticionIndicio):
+        return "Modo: hint. Da el indicio conceptual inicial de esta pregunta y termina con una pregunta orientadora."
+    if isinstance(p, PeticionPreguntaClave):
+        return "Modo: key_question. Escribe la Pregunta clave (empieza con \"Pregunta clave:\")."
+    if p.repliesLeft > 0:
+        return f"Modo: guide. Responde al mensaje del estudiante. Te quedan {p.repliesLeft} respuesta(s) después de esta."
+    return "Modo: guide. Responde al mensaje del estudiante. Te quedan 0 respuestas después de esta: es tu último mensaje, invítalo a decidir."
+
+
+def _entrada_guiada(p, aviso: str = "") -> list[dict]:
     texto_pregunta, imagenes = _contenido_pregunta(p.question)
+    mensaje = (
+        f"## Mensaje nuevo del estudiante\n<mensaje_estudiante>\n{_recortar(p.studentMessage, 1500)}\n</mensaje_estudiante>"
+        if isinstance(p, PeticionGuia) else ""
+    )
     texto = "\n\n".join(filter(None, [
-        f"## Pregunta (no conoces la respuesta correcta)\n{texto_pregunta}",
+        f"## Pregunta (no conoces la respuesta correcta ni la que marcó el estudiante)\n{texto_pregunta}",
+        _material(p),
         f"## Perfil del estudiante\n{resumen_perfil(p.student, p.question.subject, p.question.component)}",
-        f"## Estado\n{_estado_guia(p)}",
         f"## Conversación hasta ahora\n<conversacion>\n{_conversacion(p)}\n</conversacion>",
-        f"## Mensaje nuevo del estudiante\n<mensaje_estudiante>\n{_recortar(p.studentMessage, 1500)}\n</mensaje_estudiante>",
+        mensaje,
+        f"## Tu tarea en este turno\n{_tarea(p)}",
         aviso,
     ]))
     return [{"type": "input_text", "text": texto}, *imagenes]
 
 
-def _pedir_guia(p: PeticionGuia, aviso: str = "", timeout: float | None = None) -> dict:
-    return pedir_json(
+def _pedir_mensaje(p, aviso: str = "", timeout: float | None = None) -> str:
+    salida = pedir_json(
         instrucciones=ins.INSTRUCCIONES_GUIA,
-        contenido=_entrada_guia(p, aviso),
-        esquema=ins.ESQUEMA_GUIA,
-        nombre="turno_guiado",
+        contenido=_entrada_guiada(p, aviso),
+        esquema=ins.ESQUEMA_RESPUESTA,
+        nombre="mensaje_guiado",
         esfuerzo=ESFUERZO_GUIA,
         max_tokens=1500,
         timeout=timeout,
     )
+    return salida["reply"].strip()
 
 
-def turno_guiado(p: PeticionGuia) -> RespuestaGuia:
-    if p.phase not in SIGUIENTE_FASE:
-        # En decisión o revisión la plataforma no debería consultar al agente.
-        return guia_respaldo(p)
+def _limpiar(mensaje: str) -> str:
+    """Quita una interjección inicial ("Sí, …") si con eso el mensaje deja de ser un veredicto."""
+    if da_veredicto(mensaje, FASE_GUARDIA):
+        sin = quitar_interjeccion(mensaje)
+        if not da_veredicto(sin, FASE_GUARDIA):
+            return sin
+    return mensaje
 
+
+def mensaje_guiado(p: PeticionIndicio | PeticionGuia | PeticionPreguntaClave) -> RespuestaMensaje:
     inicio = time.monotonic()
     try:
-        salida = _pedir_guia(p)
-        if da_veredicto(salida["reply"], p.phase):
-            # Casi siempre es solo un "Sí," o "Exacto." al comienzo: quitarlo evita otra llamada.
-            sin_interjeccion = quitar_interjeccion(salida["reply"])
-            if not da_veredicto(sin_interjeccion, p.phase):
-                salida = {**salida, "reply": sin_interjeccion}
-        if da_veredicto(salida["reply"], p.phase):
-            log.warning("Veredicto detectado en %s (fase %s): %r; se pide otro mensaje", p.sessionId, p.phase, _recortar(salida["reply"], 200))
+        reply = _limpiar(_pedir_mensaje(p))
+        if da_veredicto(reply, FASE_GUARDIA):
+            log.warning("Veredicto detectado en %s (%s): %r; se pide otro mensaje", p.sessionId, p.mode, _recortar(reply, 200))
             transcurrido = time.monotonic() - inicio
             if transcurrido > TIEMPO_PARA_REINTENTAR_S:
-                return guia_respaldo(p)
-            restante = PLAZO_PLATAFORMA_S - transcurrido
+                return respaldo_guiado(p)
             aviso = (
-                "## Corrección\nTu mensaje anterior sonaba a veredicto sobre una opción o un descarte "
-                f"(\"{_recortar(salida['reply'], 300)}\"). Escribe otro sin calificar opciones ni descartes: "
+                "## Corrección\nTu mensaje anterior sonaba a veredicto sobre una opción "
+                f"(\"{_recortar(reply, 300)}\"). Escribe otro sin calificar opciones ni el acierto del estudiante: "
                 "pregunta solo por el razonamiento."
             )
-            salida = _pedir_guia(p, aviso, timeout=restante)
-            sin_interjeccion = quitar_interjeccion(salida["reply"])
-            if not da_veredicto(sin_interjeccion, p.phase):
-                salida = {**salida, "reply": sin_interjeccion}
-            if da_veredicto(salida["reply"], p.phase):
+            reply = _limpiar(_pedir_mensaje(p, aviso, timeout=PLAZO_PLATAFORMA_S - transcurrido))
+            if da_veredicto(reply, FASE_GUARDIA):
                 log.warning("Veredicto repetido en %s; se usa el mensaje fijo", p.sessionId)
-                return guia_respaldo(p)
+                return respaldo_guiado(p)
     except ErrorModelo as error:
-        log.error("Fallo del modelo en turno guiado %s: %s", p.sessionId, error)
-        return guia_respaldo(p)
-
-    reply = salida["reply"].strip()
-    if not reply:
-        return guia_respaldo(p)
-    avanzar = bool(salida["avanzar"])
-    if p.phase == "descarte" and len(p.discardedOptions) < p.question.requiredDiscards and avanzar:
-        # El mensaje ya planteaba la pregunta clave, pero faltan descartes: mejor el mensaje fijo.
-        return guia_respaldo(p)
-    return RespuestaGuia(reply=reply, nextPhase=SIGUIENTE_FASE[p.phase] if avanzar else p.phase)
+        log.error("Fallo del modelo en %s (%s): %s", p.sessionId, p.mode, error)
+        return respaldo_guiado(p)
+    return RespuestaMensaje(reply=reply) if reply else respaldo_guiado(p)
 
 
 # ---------- Revisión ----------
@@ -181,18 +192,18 @@ def _entrada_revision(p: PeticionRevision) -> list[dict]:
     q = p.question
     texto_pregunta, imagenes = _contenido_pregunta(q)
     porques = "\n".join(f"{o}. {q.optionRationales[o]}" for o in q.options if q.optionRationales.get(o)) or "(el profesor no escribió el porqué de cada opción)"
-    descartes = "\n".join(
-        f"- {o}: {'era la CORRECTA (mal descartada)' if o == q.correctAnswer else 'BIEN descartada'}"
-        for o in p.discardedOptions
-    ) or "- (no descartó ninguna opción)"
-    resultado = "acertó" if p.finalAnswer == q.correctAnswer else "falló"
-    texto = "\n\n".join([
+    texto = "\n\n".join(filter(None, [
         f"## Pregunta\n{texto_pregunta}",
         f"## Clave del profesor\nRespuesta correcta: {q.correctAnswer}\nExplicación: {q.explanation or '(sin explicación)'}\nPor qué de cada opción:\n{porques}",
-        f"## Lo que hizo el estudiante\nDescartes (calculados por la plataforma):\n{descartes}\nDecisión final: {p.finalAnswer} ({resultado})\nCerteza que marcó: {p.certainty}",
+        "## Lo que hizo el estudiante\n"
+        f"Primera vuelta (solo, como en el examen): {p.firstAnswer or 'sin responder'}\n"
+        f"Decisión final (después de razonar con Marco): {p.finalAnswer}\n"
+        f"Resultado: {p.outcome}\n"
+        f"Usó la Pregunta clave: {'sí' if p.usedKeyQuestion else 'no'}",
+        _material(p),
         f"## Perfil del estudiante\n{resumen_perfil(p.student, q.subject, q.component)}",
         f"## Conversación con Marco\n<conversacion>\n{_conversacion(p)}\n</conversacion>",
-    ])
+    ]))
     return [{"type": "input_text", "text": texto}, *imagenes]
 
 
@@ -204,17 +215,13 @@ def revision(p: PeticionRevision) -> RespuestaRevision:
             esquema=ins.ESQUEMA_REVISION,
             nombre="revision",
             esfuerzo=ESFUERZO_REVISION,
-            max_tokens=3000,
+            max_tokens=2500,
         )
     except ErrorModelo as error:
         log.error("Fallo del modelo en revisión %s: %s", p.sessionId, error)
         return revision_respaldo(p)
-
-    escritas = {r["opcion"]: r["texto"].strip() for r in salida["razones"] if r["texto"].strip()}
-    # Una razón por cada descarte, ni más ni menos; si el modelo omitió alguna, se usa la del profesor.
-    razones = {o: escritas.get(o) or razon_respaldo(p, o) for o in p.discardedOptions}
-    conclusion = salida["conclusion"].strip() or revision_respaldo(p).conclusion
-    return RespuestaRevision(discardReasons=razones, conclusion=conclusion)
+    texto = salida["review"].strip()
+    return RespuestaRevision(review=texto) if texto else revision_respaldo(p)
 
 
 # ---------- Rutas ----------
@@ -222,7 +229,7 @@ def revision(p: PeticionRevision) -> RespuestaRevision:
 @app.get("/salud")
 def salud() -> dict:
     # K_REVISION la pone Cloud Run: sirve para confirmar qué versión está desplegada.
-    return {"ok": True, "revision": os.getenv("K_REVISION", "local")}
+    return {"ok": True, "revision": os.getenv("K_REVISION", "local"), "contrato": 4}
 
 
 @app.post("/")
@@ -231,9 +238,9 @@ def atender(cuerpo: dict, authorization: str | None = Header(default=None)):
     try:
         p = _peticion.validate_python(cuerpo)
     except Exception as error:
-        raise HTTPException(status_code=422, detail=f"Petición fuera del contrato v3: {error}") from error
-    if p.contractVersion != 3:
-        log.warning("Versión de contrato %s; el agente implementa la 3", p.contractVersion)
-    if isinstance(p, PeticionGuia):
-        return turno_guiado(p).model_dump()
-    return revision(p).model_dump()
+        raise HTTPException(status_code=422, detail=f"Petición fuera del contrato v4: {error}") from error
+    if p.contractVersion != 4:
+        log.warning("Versión de contrato %s; el agente implementa la 4", p.contractVersion)
+    if isinstance(p, PeticionRevision):
+        return revision(p).model_dump()
+    return mensaje_guiado(p).model_dump()

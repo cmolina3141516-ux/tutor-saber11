@@ -1,7 +1,7 @@
-# Marco: agente-tutor socrático (contrato v3)
+# Marco: agente-tutor socrático (contrato v4, dos vueltas)
 
 Servicio HTTP que la plataforma Prueba Saber 11 llama desde `TUTOR_AGENT_URL`. Implementa el
-contrato v3 (`docs/tutor-agent-contract.md` en el repositorio de la plataforma) con OpenAI
+contrato v4 (`docs/tutor-agent-contract.md` en el repositorio de la plataforma: entrenamiento en dos vueltas) con OpenAI
 `gpt-5.4-mini`.
 
 La app Streamlit de la raíz (`app.py`, desplegada en Render) es otro producto y no se toca aquí.
@@ -9,7 +9,7 @@ La app Streamlit de la raíz (`app.py`, desplegada en Render) es otro producto y
 ## Archivos
 | Archivo | Qué hace |
 |---|---|
-| `contrato.py` | Tipos del contrato v3 (espejo de `src/tutor/contract.ts`). |
+| `contrato.py` | Tipos del contrato v4 (espejo de `src/tutor/contract.ts`). |
 | `instrucciones.py` | Instrucciones de Marco para el turno guiado y la revisión. Aquí se mejora el comportamiento. |
 | `perfil.py` | Resume el progreso del estudiante en un nivel por área y componente. |
 | `guardia.py` | Segunda barrera: detecta mensajes guiados que suenan a veredicto. |

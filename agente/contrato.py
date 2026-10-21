@@ -1,4 +1,4 @@
-"""Tipos del contrato v3 entre la plataforma Prueba Saber 11 y Marco.
+"""Tipos del contrato v4 entre la plataforma Prueba Saber 11 y Marco (entrenamiento en dos vueltas).
 
 Son el espejo en Python de src/tutor/contract.ts (en el repositorio de la plataforma) y de
 docs/tutor-agent-contract.md. Si la plataforma cambia el contrato, se cambia aquí.
@@ -11,15 +11,7 @@ from typing import Annotated, Literal, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 Opcion = Literal["A", "B", "C", "D"]
-Fase = Literal["indagacion", "descarte", "pregunta_clave", "decision", "revision"]
-Certeza = Literal["seguro", "dudas", "adivine"]
-
-# Fases en las que el estudiante conversa con Marco, y a cuál pasa cada una.
-SIGUIENTE_FASE: dict[str, Fase] = {
-    "indagacion": "descarte",
-    "descarte": "pregunta_clave",
-    "pregunta_clave": "decision",
-}
+Resultado = Literal["mantuvo_correcta", "corrigio", "abandono_correcta", "sostuvo_error"]
 
 
 class Flexible(BaseModel):
@@ -42,7 +34,6 @@ class Pregunta(Flexible):
     imageUrl: Optional[str] = None
     options: list[Opcion]
     optionTexts: dict[Opcion, str] = Field(default_factory=dict)
-    requiredDiscards: int = 2
 
 
 class PreguntaConClave(Pregunta):
@@ -57,55 +48,68 @@ class Mensaje(Flexible):
     at: str = ""
 
 
+class TextoApoyo(Flexible):
+    title: str = ""
+    text: str = ""
+
+
 class Contadores(Flexible):
     guided: int = 0
     correct: int = 0
-    discardsTotal: int = 0
-    discardsGood: int = 0
 
 
 class Estudiante(Flexible):
     firstName: str = ""
     questionsGuided: int = 0
     questionsCorrect: int = 0
-    discardsTotal: int = 0
-    discardsGood: int = 0
     bySubject: dict[str, Contadores] = Field(default_factory=dict)
     byComponent: dict[str, Contadores] = Field(default_factory=dict)
 
 
-class PeticionGuia(Flexible):
-    contractVersion: int = 3
-    mode: Literal["guide"]
+class Base(Flexible):
+    contractVersion: int = 4
     sessionId: str = ""
+    supportTexts: list[TextoApoyo] = Field(default_factory=list)
+    history: list[Mensaje] = Field(default_factory=list)
+    student: Estudiante = Field(default_factory=Estudiante)
+
+
+# Sin respuesta correcta ni respuesta de la primera vuelta.
+class PeticionIndicio(Base):
+    mode: Literal["hint"]
     question: Pregunta
-    phase: Fase
-    discardedOptions: list[Opcion] = Field(default_factory=list)
-    history: list[Mensaje] = Field(default_factory=list)
+
+
+class PeticionGuia(Base):
+    mode: Literal["guide"]
+    question: Pregunta
     studentMessage: str
-    student: Estudiante = Field(default_factory=Estudiante)
+    # Respuestas que le quedan a Marco en esta pregunta después de esta (0 = la última).
+    repliesLeft: int = 0
 
 
-class PeticionRevision(Flexible):
-    contractVersion: int = 3
+class PeticionPreguntaClave(Base):
+    mode: Literal["key_question"]
+    question: Pregunta
+
+
+# Después de la decisión final: ya viajan la correcta y las dos respuestas.
+class PeticionRevision(Base):
     mode: Literal["review"]
-    sessionId: str = ""
     question: PreguntaConClave
-    discardedOptions: list[Opcion] = Field(default_factory=list)
+    firstAnswer: Optional[Opcion] = None
     finalAnswer: Opcion
-    certainty: Certeza = "dudas"
-    history: list[Mensaje] = Field(default_factory=list)
-    student: Estudiante = Field(default_factory=Estudiante)
+    outcome: Resultado
+    usedKeyQuestion: bool = False
 
 
-Peticion = Annotated[Union[PeticionGuia, PeticionRevision], Field(discriminator="mode")]
+PeticionGuiada = Union[PeticionIndicio, PeticionGuia, PeticionPreguntaClave]
+Peticion = Annotated[Union[PeticionIndicio, PeticionGuia, PeticionPreguntaClave, PeticionRevision], Field(discriminator="mode")]
 
 
-class RespuestaGuia(BaseModel):
+class RespuestaMensaje(BaseModel):
     reply: str
-    nextPhase: Fase
 
 
 class RespuestaRevision(BaseModel):
-    discardReasons: dict[Opcion, str]
-    conclusion: str
+    review: str
