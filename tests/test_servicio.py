@@ -234,3 +234,10 @@ def test_turno_con_svg_no_manda_svg_al_modelo(modelo, monkeypatch):
     cliente.post("/", json=cuerpo)
     urls = [p.get("image_url", "") for p in llamadas[0]["contenido"]]
     assert all("svg" not in u for u in urls) and any(u.startswith("data:image/png") for u in urls)
+
+
+def test_instrucciones_incluyen_el_indicio_mayeutico():
+    from agente.instrucciones import INSTRUCCIONES_GUIA, INSTRUCCIONES_REVISION
+    assert "mayéutica" in INSTRUCCIONES_GUIA and "indicio" in INSTRUCCIONES_GUIA.lower()
+    # El indicio es para las fases guiadas; la revisión no lo necesita.
+    assert "El indicio conceptual" not in INSTRUCCIONES_REVISION
