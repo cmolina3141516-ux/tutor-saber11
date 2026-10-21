@@ -176,6 +176,10 @@ def test_peticion_fuera_de_contrato():
     "¿Estás seguro de esa?",
     "Creo que es la opción C.",
     "Vas por buen camino.",
+    # Frases que el modelo real produjo en la primera prueba (2026-10-21).
+    "Sí, vas por la idea: ahora compara.",
+    "Vas sumando con el descarte.",
+    "No, fíjate en el total.",
 ])
 def test_guardia_detecta(mensaje):
     assert da_veredicto(mensaje)
@@ -186,6 +190,7 @@ def test_guardia_detecta(mensaje):
     "Citaste la tabla. ¿Qué parte de ella sostiene ese descarte?",
     "Lo que se pide es a cuánto equivale la parte roja. ¿Cuántas bolas hay en total?",
     "¿Qué condición tiene que cumplir la respuesta?",
+    "No te la voy a decir de una, pero te acompaño para que la saques tú.",
 ])
 def test_guardia_deja_pasar(mensaje):
     assert not da_veredicto(mensaje)
