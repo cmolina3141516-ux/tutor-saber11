@@ -120,7 +120,7 @@ def test_veredicto_se_reemplaza(modelo):
 
 def test_veredicto_repetido_usa_mensaje_fijo(modelo):
     _, respuestas = modelo
-    respuestas += [{"reply": "Correcto, esa no era.", "avanzar": False}, {"reply": "¿Seguro que la A no?", "avanzar": False}]
+    respuestas += [{"reply": "Esa es la correcta, sigue.", "avanzar": False}, {"reply": "¿Seguro que la A no?", "avanzar": False}]
     r = cliente.post("/", json=guia("descarte", ["A"], "Descarto la A"))
     assert r.json() == {"reply": "Anotado tu descarte de la A. ¿Cuál es la siguiente, y qué la contradice?", "nextPhase": "descarte"}
 
@@ -241,3 +241,30 @@ def test_instrucciones_incluyen_el_indicio_mayeutico():
     assert "mayéutica" in INSTRUCCIONES_GUIA and "indicio" in INSTRUCCIONES_GUIA.lower()
     # El indicio es para las fases guiadas; la revisión no lo necesita.
     assert "El indicio conceptual" not in INSTRUCCIONES_REVISION
+
+
+def test_instrucciones_piden_que_el_estudiante_formule_la_idea():
+    from agente.instrucciones import INSTRUCCIONES_GUIA
+    assert "NUNCA respondas tú la pregunta de tu indicio" in INSTRUCCIONES_GUIA
+    assert "descartemos" in INSTRUCCIONES_GUIA
+
+
+def test_interjeccion_inicial_se_quita_sin_otra_llamada(modelo):
+    llamadas, respuestas = modelo
+    respuestas.append({"reply": "Sí, anotado. ¿Qué dato del enunciado sostiene ese descarte?", "avanzar": False})
+    r = cliente.post("/", json=guia("descarte", ["A"], "Descarto la A porque compara rojas con azules"))
+    assert r.json()["reply"] == "Anotado. ¿Qué dato del enunciado sostiene ese descarte?"
+    assert len(llamadas) == 1
+
+
+def test_en_indagacion_las_reacciones_no_bloquean(modelo):
+    llamadas, respuestas = modelo
+    respuestas.append({"reply": "Vas bien con esa lectura. ¿Qué datos de la gráfica usarías?", "avanzar": False})
+    r = cliente.post("/", json=guia("indagacion"))
+    assert r.json()["reply"].startswith("Vas bien")
+    assert len(llamadas) == 1
+
+
+def test_en_indagacion_si_se_bloquea_hablar_de_opciones():
+    assert da_veredicto("Eso apunta a que es la B.", "indagacion")
+    assert not da_veredicto("Sí, eso piden. ¿Qué datos usarías?", "indagacion")

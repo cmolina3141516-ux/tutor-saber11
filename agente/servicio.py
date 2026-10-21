@@ -22,7 +22,7 @@ from .contrato import (
     RespuestaGuia,
     RespuestaRevision,
 )
-from .guardia import da_veredicto
+from .guardia import da_veredicto, quitar_interjeccion
 from .imagenes import partes_imagen
 from .modelo import ESFUERZO_GUIA, ESFUERZO_REVISION, ErrorModelo, pedir_json
 from .perfil import resumen_perfil
@@ -138,8 +138,13 @@ def turno_guiado(p: PeticionGuia) -> RespuestaGuia:
     inicio = time.monotonic()
     try:
         salida = _pedir_guia(p)
-        if da_veredicto(salida["reply"]):
-            log.warning("Veredicto detectado en %s (fase %s); se pide otro mensaje", p.sessionId, p.phase)
+        if da_veredicto(salida["reply"], p.phase):
+            # Casi siempre es solo un "Sí," o "Exacto." al comienzo: quitarlo evita otra llamada.
+            sin_interjeccion = quitar_interjeccion(salida["reply"])
+            if not da_veredicto(sin_interjeccion, p.phase):
+                salida = {**salida, "reply": sin_interjeccion}
+        if da_veredicto(salida["reply"], p.phase):
+            log.warning("Veredicto detectado en %s (fase %s): %r; se pide otro mensaje", p.sessionId, p.phase, _recortar(salida["reply"], 200))
             transcurrido = time.monotonic() - inicio
             if transcurrido > TIEMPO_PARA_REINTENTAR_S:
                 return guia_respaldo(p)
@@ -150,7 +155,10 @@ def turno_guiado(p: PeticionGuia) -> RespuestaGuia:
                 "pregunta solo por el razonamiento."
             )
             salida = _pedir_guia(p, aviso, timeout=restante)
-            if da_veredicto(salida["reply"]):
+            sin_interjeccion = quitar_interjeccion(salida["reply"])
+            if not da_veredicto(sin_interjeccion, p.phase):
+                salida = {**salida, "reply": sin_interjeccion}
+            if da_veredicto(salida["reply"], p.phase):
                 log.warning("Veredicto repetido en %s; se usa el mensaje fijo", p.sessionId)
                 return guia_respaldo(p)
     except ErrorModelo as error:
