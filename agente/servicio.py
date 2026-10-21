@@ -23,6 +23,7 @@ from .contrato import (
     RespuestaRevision,
 )
 from .guardia import da_veredicto
+from .imagenes import partes_imagen
 from .modelo import ESFUERZO_GUIA, ESFUERZO_REVISION, ErrorModelo, pedir_json
 from .perfil import resumen_perfil
 from .respaldo import guia_respaldo, razon_respaldo, revision_respaldo
@@ -69,11 +70,11 @@ def _contenido_pregunta(q: Pregunta) -> tuple[str, list[dict]]:
     if q.context:
         partes.append(f"\nTexto o gráfico compartido — {q.context.title}:\n{q.context.text}".rstrip())
         if q.context.imageUrl:
-            imagenes.append({"type": "input_image", "image_url": q.context.imageUrl, "detail": "auto"})
+            imagenes += partes_imagen(q.context.imageUrl, "la imagen del contexto")
             partes.append("(La imagen del contexto va adjunta.)")
     partes.append(f"\nEnunciado:\n{q.text or '(el enunciado está en la imagen adjunta)'}")
     if q.imageUrl:
-        imagenes.append({"type": "input_image", "image_url": q.imageUrl, "detail": "auto"})
+        imagenes += partes_imagen(q.imageUrl, "la imagen del enunciado")
         partes.append("(La imagen del enunciado va adjunta.)")
     partes.append("\nOpciones:")
     partes += [f"{o}. {q.optionTexts.get(o, '(ver imagen)')}" for o in q.options]

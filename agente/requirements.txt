@@ -2,3 +2,4 @@ fastapi==0.156.8
 uvicorn==0.54.0
 openai==3.35.1
 pydantic==2.14.1
+cairosvg==2.9.1

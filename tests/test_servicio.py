@@ -196,3 +196,41 @@ def test_guardia_detecta(mensaje):
 ])
 def test_guardia_deja_pasar(mensaje):
     assert not da_veredicto(mensaje)
+
+
+# ---------- Imágenes del banco ----------
+
+from agente import imagenes
+
+SVG = '<svg xmlns="http://www.w3.org/2000/svg"><text x="1" y="1">Desempleo (%)</text><text>15,9</text><text>2020</text></svg>'
+SVG_URL = "data:image/svg+xml;base64," + __import__("base64").b64encode(SVG.encode()).decode()
+
+
+def test_svg_se_convierte_a_png(monkeypatch):
+    monkeypatch.setattr(imagenes, "_svg_a_png", lambda svg: b"PNG")
+    partes = imagenes.partes_imagen(SVG_URL, "la imagen del enunciado")
+    assert partes == [{"type": "input_image", "image_url": "data:image/png;base64,UE5H", "detail": "auto"}]
+
+
+def test_svg_sin_conversion_manda_su_texto(monkeypatch):
+    def falla(svg):
+        raise OSError("sin libcairo")
+    monkeypatch.setattr(imagenes, "_svg_a_png", falla)
+    partes = imagenes.partes_imagen(SVG_URL, "la imagen del enunciado")
+    assert partes[0]["type"] == "input_text"
+    assert "Desempleo (%) | 15,9 | 2020" in partes[0]["text"]
+
+
+def test_imagen_normal_pasa_tal_cual():
+    assert imagenes.partes_imagen("https://x/y.png", "img")[0]["image_url"] == "https://x/y.png"
+
+
+def test_turno_con_svg_no_manda_svg_al_modelo(modelo, monkeypatch):
+    llamadas, respuestas = modelo
+    monkeypatch.setattr(imagenes, "_svg_a_png", lambda svg: b"PNG")
+    respuestas.append({"reply": "¿Qué muestra el eje vertical de la gráfica?", "avanzar": False})
+    cuerpo = guia()
+    cuerpo["question"] = {**PREGUNTA, "imageUrl": SVG_URL}
+    cliente.post("/", json=cuerpo)
+    urls = [p.get("image_url", "") for p in llamadas[0]["contenido"]]
+    assert all("svg" not in u for u in urls) and any(u.startswith("data:image/png") for u in urls)
