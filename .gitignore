@@ -1,0 +1,5 @@
+__pycache__/
+.venv/
+.venv-agente/
+.env
+.pytest_cache/

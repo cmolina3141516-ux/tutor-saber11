@@ -1,0 +1,8 @@
+.git
+.venv
+.venv-agente
+__pycache__
+tests
+components
+app.py
+.env
