@@ -239,3 +239,64 @@ def test_imagen_normal_pasa_tal_cual():
 def test_revision_no_inventa_razonamientos():
     from agente.instrucciones import INSTRUCCIONES_REVISION
     assert "NO inventes lo que pensó" in INSTRUCCIONES_REVISION
+
+
+# ---------- Informe de la prueba corta (contrato v5) ----------
+
+def pregunta_informe(n, tema, acerto, marco="A", correcta="B", **extra):
+    return {
+        "n": n, "competencia": "Formulación y ejecución", "component": "Aleatorio", "topic": tema,
+        "difficulty": "media", "text": f"Enunciado {n}", "optionTexts": {"A": "uno", "B": "dos", "C": "tres", "D": "cuatro"},
+        "answer": correcta if acerto else marco, "correctAnswer": correcta, "isCorrect": acerto,
+        "explanation": f"Explicación {n}", "chosenRationale": None if acerto else f"Por qué no {n}", "timeSec": 40, **extra,
+    }
+
+
+def informe(**extra):
+    preguntas = [pregunta_informe(1, "Probabilidad condicional", False), pregunta_informe(2, "Probabilidad condicional", False),
+                 pregunta_informe(3, "Medidas de tendencia central", True), pregunta_informe(4, "Medidas de tendencia central", True)]
+    return {
+        "contractVersion": 5, "mode": "quiz_report", "sessionId": "intento1",
+        "quiz": {"title": "Prueba corta Aleatorio 1", "subject": "matematicas", "trainingTitle": "Aleatorio 1"},
+        "student": ESTUDIANTE, "score": 2, "total": 4, "evaluative": True, "questions": preguntas,
+        "supportTopics": [{"topic": "Probabilidad condicional", "titles": ["Tablas de contingencia"]}], **extra,
+    }
+
+
+def test_informe_recibe_preguntas_claves_y_material(modelo):
+    llamadas, respuestas = modelo
+    respuestas.append({
+        "summary": "Ana, dominas las medidas de tendencia central.", "strengths": ["Promedio y mediana."],
+        "improve": [{"topic": "Probabilidad condicional", "diagnosis": "Usaste el total general.", "advice": "Ubica la condición."}],
+        "nextSteps": ["Mira \"Tablas de contingencia\"."],
+    })
+    r = cliente.post("/", json=informe())
+    assert r.status_code == 200
+    assert r.json()["report"]["improve"][0]["topic"] == "Probabilidad condicional"
+    entrada = llamadas[0]["contenido"][0]["text"]
+    assert "### Pregunta 1 — FALLÓ" in entrada and "### Pregunta 3 — ACERTÓ" in entrada
+    assert "Marcó: A · Correcta: B" in entrada and "Por qué no la A: Por qué no 1" in entrada
+    assert '"Tablas de contingencia"' in entrada and 'Entrenamiento pareado: "Aleatorio 1"' in entrada
+    assert llamadas[0]["nombre"] == "informe_prueba"
+
+
+def test_informe_recorta_listas_largas(modelo):
+    _, respuestas = modelo
+    respuestas.append({"summary": "Bien.", "strengths": ["a", "b", "c", "d"], "improve": [], "nextSteps": ["1", "2", "3", "4", " "]})
+    rep = cliente.post("/", json=informe()).json()["report"]
+    assert rep["strengths"] == ["a", "b", "c"] and rep["nextSteps"] == ["1", "2", "3"]
+
+
+def test_informe_respaldo_si_falla_el_modelo(modelo):
+    _, respuestas = modelo
+    respuestas.append(ErrorModelo("timeout"))
+    rep = cliente.post("/", json=informe()).json()["report"]
+    assert rep["summary"].startswith("Ana, acertaste 2 de 4")
+    assert rep["improve"][0]["topic"] == "Probabilidad condicional"
+    assert "Tablas de contingencia" in rep["improve"][0]["advice"]
+    assert rep["strengths"] == ["Respondiste bien las 2 preguntas de Medidas de tendencia central."]
+    assert any("Aleatorio 1" in paso for paso in rep["nextSteps"])
+
+
+def test_salud_contrato_5():
+    assert cliente.get("/salud").json()["contrato"] == 5

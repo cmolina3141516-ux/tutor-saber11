@@ -1,4 +1,5 @@
-"""Tipos del contrato v4 entre la plataforma Prueba Saber 11 y Marco (entrenamiento en dos vueltas).
+"""Tipos del contrato v5 entre la plataforma Prueba Saber 11 y Marco: entrenamiento en dos vueltas
+(v4) e informe de las pruebas cortas (v5).
 
 Son el espejo en Python de src/tutor/contract.ts (en el repositorio de la plataforma) y de
 docs/tutor-agent-contract.md. Si la plataforma cambia el contrato, se cambia aquí.
@@ -103,8 +104,59 @@ class PeticionRevision(Base):
     usedKeyQuestion: bool = False
 
 
+# ---------- Informe de una prueba corta (contrato v5) ----------
+# La prueba corta se presenta sin Marco. Al entregarla, Marco recibe todas las preguntas con la
+# respuesta del estudiante y la correcta, y escribe UN informe para el estudiante.
+
+class PreguntaInforme(Flexible):
+    n: int
+    competencia: str = ""
+    component: Optional[str] = None
+    topic: Optional[str] = None
+    difficulty: str = ""
+    contextTitle: Optional[str] = None
+    text: Optional[str] = None
+    optionTexts: dict[Opcion, str] = Field(default_factory=dict)
+    answer: Optional[Opcion] = None
+    correctAnswer: Opcion
+    isCorrect: bool
+    explanation: str = ""
+    # Por qué la opción que marcó no es la correcta (escrito por el profesor), si se equivocó.
+    chosenRationale: Optional[str] = None
+    timeSec: Optional[int] = None
+
+
+class PruebaCorta(Flexible):
+    title: str = ""
+    subject: str
+    # Entrenamiento con el que va pareada la prueba (para recomendar repetirlo).
+    trainingTitle: Optional[str] = None
+
+
+class MaterialTema(Flexible):
+    topic: str
+    titles: list[str] = Field(default_factory=list)
+
+
+class PeticionInformePrueba(Flexible):
+    contractVersion: int = 5
+    mode: Literal["quiz_report"]
+    sessionId: str = ""
+    quiz: PruebaCorta
+    student: Estudiante = Field(default_factory=Estudiante)
+    score: int
+    total: int
+    evaluative: bool = True
+    questions: list[PreguntaInforme]
+    # Material de apoyo que existe en la plataforma para los temas de la prueba (solo títulos).
+    supportTopics: list[MaterialTema] = Field(default_factory=list)
+
+
 PeticionGuiada = Union[PeticionIndicio, PeticionGuia, PeticionPreguntaClave]
-Peticion = Annotated[Union[PeticionIndicio, PeticionGuia, PeticionPreguntaClave, PeticionRevision], Field(discriminator="mode")]
+Peticion = Annotated[
+    Union[PeticionIndicio, PeticionGuia, PeticionPreguntaClave, PeticionRevision, PeticionInformePrueba],
+    Field(discriminator="mode"),
+]
 
 
 class RespuestaMensaje(BaseModel):
@@ -113,3 +165,20 @@ class RespuestaMensaje(BaseModel):
 
 class RespuestaRevision(BaseModel):
     review: str
+
+
+class PuntoAMejorar(BaseModel):
+    topic: str
+    diagnosis: str
+    advice: str
+
+
+class InformePrueba(BaseModel):
+    summary: str
+    strengths: list[str]
+    improve: list[PuntoAMejorar]
+    nextSteps: list[str]
+
+
+class RespuestaInformePrueba(BaseModel):
+    report: InformePrueba

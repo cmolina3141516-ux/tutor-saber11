@@ -1,4 +1,4 @@
-# Marco, agente-tutor socrático (contrato v4: dos vueltas). Se despliega en Cloud Run.
+# Marco, agente-tutor socrático (contrato v5: dos vueltas e informe de pruebas cortas). Se despliega en Cloud Run.
 # La app Streamlit (app.py) sigue desplegándose aparte en Render y no entra en esta imagen.
 FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1

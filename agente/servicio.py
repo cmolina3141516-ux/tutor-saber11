@@ -1,12 +1,14 @@
-"""Servicio HTTP de Marco (contrato v4: entrenamiento en dos vueltas).
+"""Servicio HTTP de Marco (contrato v5).
 
-La plataforma hace POST a la raíz en la segunda vuelta con uno de cuatro modos y espera el JSON
-del contrato en menos de 20 s:
+La plataforma hace POST a la raíz con uno de cinco modos y espera el JSON del contrato en menos
+de 20 s. Los cuatro primeros son de la segunda vuelta del entrenamiento (v4):
   hint          -> indicio mayéutico inicial               -> {"reply"}
   guide         -> respuesta a un mensaje del estudiante   -> {"reply"}
   key_question  -> la Pregunta clave                       -> {"reply"}
   review        -> revisión tras la decisión final         -> {"review"}
-En los tres primeros no viajan ni la respuesta correcta ni la de la primera vuelta.
+En hint, guide y key_question no viajan ni la respuesta correcta ni la de la primera vuelta.
+Y uno de las pruebas cortas (v5):
+  quiz_report   -> informe al entregar una prueba corta    -> {"report"}
 """
 
 import hmac
@@ -23,17 +25,19 @@ from .contrato import (
     Peticion,
     PeticionGuia,
     PeticionIndicio,
+    PeticionInformePrueba,
     PeticionPreguntaClave,
     PeticionRevision,
     Pregunta,
+    RespuestaInformePrueba,
     RespuestaMensaje,
     RespuestaRevision,
 )
 from .guardia import da_veredicto, quitar_interjeccion
 from .imagenes import partes_imagen
-from .modelo import ESFUERZO_GUIA, ESFUERZO_REVISION, ErrorModelo, pedir_json
+from .modelo import ESFUERZO_GUIA, ESFUERZO_INFORME, ESFUERZO_REVISION, ErrorModelo, pedir_json
 from .perfil import resumen_perfil
-from .respaldo import respaldo_guiado, revision_respaldo
+from .respaldo import informe_respaldo, respaldo_guiado, revision_respaldo
 
 log = logging.getLogger("marco")
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"), format="%(levelname)s %(name)s %(message)s")
@@ -224,12 +228,74 @@ def revision(p: PeticionRevision) -> RespuestaRevision:
     return RespuestaRevision(review=texto) if texto else revision_respaldo(p)
 
 
+# ---------- Informe de una prueba corta ----------
+
+MAX_ITEMS_INFORME = 3
+PLAZO_INFORME_S = 38.0
+
+
+def _entrada_informe(p: PeticionInformePrueba) -> list[dict]:
+    lineas = []
+    for q in p.questions:
+        opciones = "; ".join(f"{o}. {_recortar(t, 160)}" for o, t in q.optionTexts.items())
+        partes = [
+            f"### Pregunta {q.n} — {'ACERTÓ' if q.isCorrect else ('SIN RESPONDER' if not q.answer else 'FALLÓ')}",
+            f"Competencia: {q.competencia or 'sin indicar'} · Componente: {q.component or 'sin indicar'} · Tema: {q.topic or 'sin indicar'} · Dificultad: {q.difficulty or 'sin indicar'}",
+        ]
+        if q.contextTitle:
+            partes.append(f"Texto base: {q.contextTitle}")
+        partes.append(f"Enunciado: {_recortar(q.text or '(con imagen)', 500)}")
+        partes.append(f"Opciones: {opciones or '(en imagen)'}")
+        partes.append(f"Marcó: {q.answer or 'nada'} · Correcta: {q.correctAnswer}" + (f" · Tiempo: {q.timeSec} s" if q.timeSec is not None else ""))
+        if q.explanation:
+            partes.append(f"Explicación del profesor: {_recortar(q.explanation, 500)}")
+        if not q.isCorrect and q.chosenRationale:
+            partes.append(f"Por qué no la {q.answer}: {_recortar(q.chosenRationale, 400)}")
+        lineas.append("\n".join(partes))
+    material = "\n".join(
+        f"- {m.topic}: " + " | ".join(f'"{t}"' for t in m.titles) for m in p.supportTopics if m.titles
+    ) or "(no hay material de apoyo para estos temas)"
+    pareado = f'\nEntrenamiento pareado: "{p.quiz.trainingTitle}"' if p.quiz.trainingTitle else ""
+    texto = "\n\n".join([
+        f"## Prueba\n{p.quiz.title or 'Prueba corta'} · Área: {p.quiz.subject}\n"
+        f"Resultado: {p.score} de {p.total} · {'Intento evaluativo' if p.evaluative else 'Intento de práctica'}{pareado}",
+        f"## Perfil del estudiante\n{resumen_perfil(p.student, p.quiz.subject, None)}",
+        "## Preguntas\n" + "\n\n".join(lineas),
+        f"## Material de apoyo disponible (títulos exactos)\n{material}",
+    ])
+    return [{"type": "input_text", "text": texto}]
+
+
+def informe_prueba(p: PeticionInformePrueba) -> RespuestaInformePrueba:
+    try:
+        salida = pedir_json(
+            instrucciones=ins.INSTRUCCIONES_INFORME,
+            contenido=_entrada_informe(p),
+            esquema=ins.ESQUEMA_INFORME,
+            nombre="informe_prueba",
+            esfuerzo=ESFUERZO_INFORME,
+            max_tokens=3000,
+            # No es un turno de conversación: la plataforma espera el informe hasta 45 s.
+            timeout=PLAZO_INFORME_S,
+        )
+        informe = RespuestaInformePrueba.model_validate({"report": salida}).report
+    except (ErrorModelo, ValueError) as error:
+        log.error("Fallo del modelo en el informe %s: %s", p.sessionId, error)
+        return informe_respaldo(p)
+    if not informe.summary.strip():
+        return informe_respaldo(p)
+    informe.strengths = [s.strip() for s in informe.strengths if s.strip()][:MAX_ITEMS_INFORME]
+    informe.improve = informe.improve[:MAX_ITEMS_INFORME]
+    informe.nextSteps = [s.strip() for s in informe.nextSteps if s.strip()][:MAX_ITEMS_INFORME]
+    return RespuestaInformePrueba(report=informe)
+
+
 # ---------- Rutas ----------
 
 @app.get("/salud")
 def salud() -> dict:
     # K_REVISION la pone Cloud Run: sirve para confirmar qué versión está desplegada.
-    return {"ok": True, "revision": os.getenv("K_REVISION", "local"), "contrato": 4}
+    return {"ok": True, "revision": os.getenv("K_REVISION", "local"), "contrato": 5}
 
 
 @app.post("/")
@@ -238,9 +304,11 @@ def atender(cuerpo: dict, authorization: str | None = Header(default=None)):
     try:
         p = _peticion.validate_python(cuerpo)
     except Exception as error:
-        raise HTTPException(status_code=422, detail=f"Petición fuera del contrato v4: {error}") from error
-    if p.contractVersion != 4:
-        log.warning("Versión de contrato %s; el agente implementa la 4", p.contractVersion)
+        raise HTTPException(status_code=422, detail=f"Petición fuera del contrato v5: {error}") from error
+    if p.contractVersion not in (4, 5):
+        log.warning("Versión de contrato %s; el agente implementa la 4 y la 5", p.contractVersion)
+    if isinstance(p, PeticionInformePrueba):
+        return informe_prueba(p).model_dump()
     if isinstance(p, PeticionRevision):
         return revision(p).model_dump()
     return mensaje_guiado(p).model_dump()

@@ -11,6 +11,8 @@ MODELO = os.getenv("OPENAI_MODEL", "gpt-5.4-mini")
 TIEMPO_MAXIMO_S = float(os.getenv("OPENAI_TIMEOUT_S", "14"))
 ESFUERZO_GUIA = os.getenv("REASONING_EFFORT_GUIDE", "low")
 ESFUERZO_REVISION = os.getenv("REASONING_EFFORT_REVIEW", "low")
+# El informe de la prueba corta analiza 10 preguntas juntas: un poco más de razonamiento.
+ESFUERZO_INFORME = os.getenv("REASONING_EFFORT_REPORT", "medium")
 
 
 class ErrorModelo(Exception):
